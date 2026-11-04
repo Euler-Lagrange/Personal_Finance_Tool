@@ -100,8 +100,8 @@ Extracted unchanged from `word/media/image1.png` in `PSW Payroll Schedule - 2026
 
 The Word files remain at their supplied locations and are not copied into the repository:
 
-- `C:\Users\Jacob\OneDrive\Documents\Performance Software\Payroll\PSW Payroll Schedule - 2025.docx`: 101,212 bytes; SHA-256 `25CADB4BCE51DCBE4C6B20AD9594132DE2E4C669558702068D2EDEBF6EC31704`.
-- `C:\Users\Jacob\OneDrive\Documents\Performance Software\Payroll\PSW Payroll Schedule - 2026.docx`: 1,163,859 bytes; SHA-256 `3490674A2993FD7E806BB4FF8AFF8C2B78715E95B5342F1DED23C47B7152B09A`.
+- `PSW Payroll Schedule - 2025.docx`: 101,212 bytes; SHA-256 `25CADB4BCE51DCBE4C6B20AD9594132DE2E4C669558702068D2EDEBF6EC31704`.
+- `PSW Payroll Schedule - 2026.docx`: 1,163,859 bytes; SHA-256 `3490674A2993FD7E806BB4FF8AFF8C2B78715E95B5342F1DED23C47B7152B09A`.
 
 Tables were inspected through WordprocessingML and the embedded image was visually reviewed. The full documents were not rendered page by page. Notes about “PTO” or shifting reported work are personal annotations, not approved policy; the new user answers govern sick eligibility. Official holiday authority and unresolved payday conflicts need confirmation during import. Supply the Word files separately to a reviewer who needs the complete sources.
 
