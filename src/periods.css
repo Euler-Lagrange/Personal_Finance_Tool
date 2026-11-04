@@ -1,0 +1,159 @@
+.period-control {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  margin-bottom: 20px;
+}
+.period-control p,
+.annual-toolbar p {
+  color: var(--muted);
+  line-height: 1.7;
+  margin-top: 8px;
+}
+.period-control button {
+  flex-shrink: 0;
+}
+.close-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.close-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+.close-totals {
+  margin: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+}
+.close-totals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px;
+}
+.close-totals dd {
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.close-blockers {
+  border-left: 3px solid var(--danger);
+  padding: 14px;
+  background: var(--surface-alt);
+  line-height: 1.7;
+}
+.close-blockers h3,
+.close-content h3 {
+  font-size: 15px;
+}
+.close-check {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  line-height: 1.6;
+  margin: 0;
+  font-weight: 400;
+}
+.close-check input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin: 2px 0 0;
+}
+.close-content .dialog-actions {
+  padding: 0;
+  flex-wrap: wrap;
+}
+.annual-toolbar {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.annual-toolbar label {
+  max-width: 150px;
+}
+.annual-scroll {
+  overflow: auto;
+  max-width: 100%;
+}
+.annual-scroll table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+.annual-scroll th,
+.annual-scroll td {
+  padding: 10px 12px;
+  height: 42px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+.annual-scroll th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  text-align: left;
+  z-index: 1;
+  min-width: 160px;
+  max-width: 220px;
+  white-space: normal;
+}
+.annual-scroll th:last-child,
+.annual-scroll td:last-child {
+  width: auto;
+  padding: 10px 12px;
+}
+.annual-scroll thead th {
+  background: var(--surface-alt);
+  font-weight: 500;
+}
+.annual-scroll th button {
+  display: block;
+  margin: 8px auto 0;
+  font-size: 11px;
+}
+.annual-panel {
+  margin-bottom: 24px;
+}
+
+.carry-review {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 20px 0;
+}
+.carry-review p {
+  line-height: 1.5;
+}
+.carry-review label {
+  margin-top: 12px;
+}
+.carry-lines > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+}
+.carry-lines > div > span,
+.carry-lines > div > strong:nth-child(even) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.carry-review details {
+  margin-top: 16px;
+}

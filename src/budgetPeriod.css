@@ -1,0 +1,34 @@
+.budget-period {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 16px 0;
+}
+.budget-period summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.budget-period p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+.budget-period .period-choice {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.budget-period .period-choice input {
+  width: auto;
+  min-height: 0;
+  flex: none;
+}
+.budget-period label {
+  margin-top: 12px;
+}
+.budget-period .period-explanation {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+}

@@ -1,0 +1,37 @@
+.transfer-effect {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius, 8px);
+  margin: 4px 0 16px;
+}
+.transfer-effect > svg {
+  flex-shrink: 0;
+  color: var(--accent-text);
+}
+.transfer-effect strong,
+.transfer-effect span {
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.transfer-effect span {
+  color: var(--muted);
+}
+.entry-icon.transfer,
+.entry-icon.card_payment {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.transfer-route {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.transfer-route small {
+  color: var(--muted);
+  font-size: 11px;
+}

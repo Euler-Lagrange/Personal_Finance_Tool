@@ -1,0 +1,100 @@
+.statement-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: 16px;
+  padding: 0 24px 18px;
+}
+.statement-controls label {
+  margin: 0;
+}
+.statement-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 20px 24px;
+  background: var(--surface-alt);
+  border-block: 1px solid var(--line);
+}
+.statement-summary div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 130px;
+}
+.statement-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.statement-summary strong {
+  font-size: 20px;
+}
+.statement-message {
+  padding: 14px 24px;
+  line-height: 1.7;
+}
+.statement-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.statement-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.statement-scroll th,
+.statement-scroll td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.statement-scroll th {
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.statement-scroll td.number {
+  text-align: right;
+  white-space: nowrap;
+}
+.statement-scroll small {
+  display: block;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+.statement-scroll td:nth-child(2) {
+  min-width: 180px;
+  max-width: 300px;
+  overflow-wrap: anywhere;
+}
+.statement-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.statement-export {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 24px;
+}
+.statement-export small {
+  flex-basis: 100%;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.statement-path {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+@media (max-width: 1100px) {
+  .statement-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+  .statement-controls label:last-child {
+    grid-column: 1/-1;
+  }
+}

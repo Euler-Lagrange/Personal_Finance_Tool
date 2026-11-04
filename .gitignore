@@ -1,0 +1,52 @@
+# Dependencies and reproducible build output
+/node_modules/
+/dist/
+/builds/
+/src-tauri/target/
+/src-tauri/gen/
+/public/pdf-assets/
+*.tsbuildinfo
+
+# Test output and temporary caches (synthetic fixtures in source remain tracked)
+/.qa/
+/test-results/
+/playwright-report/
+/coverage/
+__pycache__/
+*.pyc
+*.log
+*.tmp
+
+# Local financial data, portable handoffs, and credentials
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.pfinance.age
+/data/
+/imports/
+/exports/
+/backups/
+provider-settings/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Packaged binaries and workstation files
+*.exe
+*.msi
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.suo
+*.user
+
+# Real financial reference material (local only, never committed)
+/docs/reference/screenshots/
+/docs/reviews/

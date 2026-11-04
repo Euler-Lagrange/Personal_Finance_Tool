@@ -1,0 +1,90 @@
+.card-payments {
+  padding: 0 28px 24px;
+}
+.card-payments h3 {
+  margin: 24px 0 12px;
+}
+.card-obligation,
+.card-payment-event {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  margin: 14px 0;
+}
+.card-payment-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.card-payment-heading > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.card-payment-heading > strong:last-child {
+  white-space: nowrap;
+}
+.card-payment-amounts {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+}
+.card-payment-amounts > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.card-payment-amounts dt {
+  color: var(--muted);
+}
+.card-payment-amounts dd {
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.card-payment-warnings {
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.card-payment-form {
+  display: grid;
+  gap: 16px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.card-payment-form > label {
+  display: grid;
+  gap: 8px;
+}
+.card-payment-form > .check-label {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+}
+.card-payment-form > .card-allocation-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  align-items: center;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.card-allocation-line small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.card-payment-summary {
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--surface-alt);
+  font-variant-numeric: tabular-nums;
+}

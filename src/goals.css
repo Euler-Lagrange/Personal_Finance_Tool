@@ -1,0 +1,126 @@
+.goals-page {
+  display: grid;
+  gap: 22px;
+}
+.goal-toolbar,
+.goal-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.goal-toolbar .import-check {
+  margin: 0 0 0 auto;
+}
+.goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 20px;
+}
+.goal-card,
+.goal-empty {
+  padding: 24px;
+}
+.goal-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.goal-card-heading h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+}
+.goal-card-heading > button {
+  margin-left: auto;
+}
+.goal-value {
+  font-size: 28px;
+  margin: 22px 0 14px;
+  font-weight: 600;
+}
+.goal-value small {
+  font-size: 13px;
+  font-weight: 400;
+}
+.goal-card small,
+.goal-purchase small,
+.goal-overview-items small {
+  display: block;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.goal-card .track > span {
+  background: var(--accent);
+}
+.goal-facts {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  margin: 18px 0;
+}
+.goal-purchases,
+.goal-history {
+  padding: 0 24px 24px;
+}
+.goal-history {
+  padding-top: 8px;
+}
+.goal-purchases > label {
+  max-width: 460px;
+}
+.goal-purchase {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.goal-purchase:last-child {
+  border-bottom: 0;
+}
+.goal-purchase > strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.goal-overview-items {
+  padding: 0 24px 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 20px;
+}
+.goal-overview-items strong {
+  display: block;
+  font-size: 20px;
+  margin: 7px 0;
+}
+.funding-row {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+}
+.funding-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.funding-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.funding-warning {
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 1.6;
+}
+@media (max-width: 1050px) {
+  .goal-grid {
+    grid-template-columns: 1fr;
+  }
+  .goal-toolbar .import-check {
+    margin-left: 0;
+  }
+}

@@ -1,0 +1,42 @@
+.household-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 0 24px 24px;
+}
+.household-tools > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.household-tools strong {
+  font-size: 20px;
+}
+.household-tools small,
+.paypal-receipt small {
+  display: block;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.paypal-receipt {
+  padding: 12px;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.paypal-receipt .import-check {
+  margin: 0 0 12px;
+}
+.paypal-receipt label:last-child {
+  margin-bottom: 0;
+}
+.paypal-fields h3 {
+  font-size: 15px;
+}
+@media (max-width: 1050px) {
+  .household-tools {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}

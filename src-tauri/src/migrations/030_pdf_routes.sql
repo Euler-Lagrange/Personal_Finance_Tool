@@ -1,0 +1,2 @@
+CREATE TABLE pdf_routes(template_id TEXT PRIMARY KEY,template_version INTEGER NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),application_id TEXT NOT NULL REFERENCES pdf_applications(id),kind TEXT NOT NULL CHECK(kind IN('bill','statement')),target_id TEXT NOT NULL,marker_json TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN(0,1)),FOREIGN KEY(template_id,template_version) REFERENCES pdf_template_versions(template_id,version));
+CREATE TABLE pdf_route_receipts(id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL);

@@ -1,0 +1,186 @@
+.setup-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.setup-tabs {
+  margin: 0;
+  min-width: 365px;
+}
+.setup-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  white-space: nowrap;
+}
+.setup-filters {
+  padding: 0 25px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.setup-search {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  flex: 1;
+  max-width: 380px;
+}
+.setup-search input {
+  width: 100%;
+}
+.check-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+.check-label input {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent-text);
+}
+.setup-filters .check-label {
+  margin: 0;
+  white-space: nowrap;
+}
+.setup-table {
+  width: 100%;
+  table-layout: auto;
+}
+.setup-table th {
+  white-space: nowrap;
+}
+.setup-table th:first-child,
+.setup-table td:first-child {
+  padding-left: 25px;
+}
+.setup-table th:last-child,
+.setup-table td:last-child {
+  padding-right: 25px;
+}
+.setup-table td {
+  padding-top: 17px;
+  padding-bottom: 17px;
+}
+.setup-table td:first-child {
+  width: 40%;
+}
+.setup-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.setup-name strong {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.setup-name svg {
+  flex-shrink: 0;
+}
+.setup-symbol {
+  display: grid;
+  place-items: center;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+.setup-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--success);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.setup-status.archived {
+  color: var(--muted);
+}
+.setup-table + .setup-empty {
+  padding: 30px;
+}
+.setup-empty {
+  padding: 28px;
+  color: var(--muted);
+}
+.setup-panel + .soft-note {
+  margin-top: 18px;
+}
+.color-field {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.color-field input {
+  padding: 3px;
+  width: 70px;
+  height: 40px;
+  cursor: pointer;
+}
+.budget-copy-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.budget-copy-row p {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 600px;
+  line-height: 1.7;
+}
+.editable-budget:disabled {
+  cursor: default;
+  opacity: 1;
+}
+:root[data-theme="marshmallow"] .setup-symbol {
+  border-radius: 12px;
+}
+@media (max-width: 1100px) {
+  .setup-table th,
+  .setup-table td {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .setup-table th:first-child,
+  .setup-table td:first-child {
+    padding-left: 18px;
+  }
+  .setup-filters {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .setup-tabs {
+    min-width: 340px;
+  }
+}
+.setup-table td > small,
+.setup-table td > span > small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.setup-account-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  min-width: 65px;
+}

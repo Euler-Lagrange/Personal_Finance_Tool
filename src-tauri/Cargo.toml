@@ -1,0 +1,41 @@
+[package]
+name = "personal-finance"
+version = "0.8.0"
+edition = "2021"
+description = "Offline personal finance desktop application"
+
+[lib]
+name = "personal_finance_lib"
+# Windows desktop links the Rust library directly; mobile/C ABI libraries are unused.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.37", features = ["bundled", "backup", "serialize"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+csv = "1.4"
+calamine = { version = "0.36", features = ["dates"] }
+sha2 = "0.10"
+base64 = "0.23"
+regex = "1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp"] }
+arboard = "3.7"
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
+quick-xml = "=0.42.0"
+lopdf = { version = "0.46.0", default-features = false }
+reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls", "json"] }
+
+age = { version = "=0.12.1", default-features = false }
+zeroize = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Media_Ocr", "Graphics_Imaging", "Storage_Streams", "Globalization", "Win32_System_WinRT", "Win32_Security_Credentials", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile = "3"

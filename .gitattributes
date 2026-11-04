@@ -1,0 +1,12 @@
+# Keep source text consistent across Windows workstations.
+* text=auto eol=lf
+
+# Preserve fixture and icon bytes exactly.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.xls binary

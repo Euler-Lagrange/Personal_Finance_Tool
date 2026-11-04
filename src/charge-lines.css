@@ -1,0 +1,24 @@
+.charge-lines {
+  margin: 18px 0;
+}
+.charge-lines > p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.charge-lines .charge-line {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+}
+.charge-line-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.charge-line-footer small {
+  color: var(--muted);
+}

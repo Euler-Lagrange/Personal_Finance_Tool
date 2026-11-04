@@ -1,0 +1,337 @@
+[
+  {
+    "Path": ".qa",
+    "Files": 147,
+    "Bytes": 68396296
+  },
+  {
+    "Path": "dist",
+    "Files": 208,
+    "Bytes": 5806525
+  },
+  {
+    "Path": "src-tauri\\target",
+    "Files": 19048,
+    "Bytes": 12187491109
+  },
+  {
+    "Path": "src-tauri\\gen",
+    "Files": 4,
+    "Bytes": 301408
+  },
+  {
+    "Path": "public\\pdf-assets",
+    "Files": 203,
+    "Bytes": 3379471
+  },
+  {
+    "Path": "src-tauri\\icons\\android",
+    "Files": 17,
+    "Bytes": 49581
+  },
+  {
+    "Path": "src-tauri\\icons\\ios",
+    "Files": 18,
+    "Bytes": 38916
+  },
+  {
+    "Path": "builds\\Personal Finance - Trial.exe",
+    "Files": 1,
+    "Bytes": 26507264
+  },
+  {
+    "Path": "builds\\Personal Finance 0.1.0 Setup.exe",
+    "Files": 1,
+    "Bytes": 226466501
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - 11 Themes.exe",
+    "Files": 1,
+    "Bytes": 10856960
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - 12 Themes.exe",
+    "Files": 1,
+    "Bytes": 10857472
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Account Balances.exe",
+    "Files": 1,
+    "Bytes": 15765504
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - AI Documents.exe",
+    "Files": 1,
+    "Bytes": 25151488
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - AI Requests.exe",
+    "Files": 1,
+    "Bytes": 24569856
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - AI Rows.exe",
+    "Files": 1,
+    "Bytes": 24956416
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - AI Suggestions.exe",
+    "Files": 1,
+    "Bytes": 25465344
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Bills.exe",
+    "Files": 1,
+    "Bytes": 15513088
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Budget Periods.exe",
+    "Files": 1,
+    "Bytes": 17630208
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Card Payments.exe",
+    "Files": 1,
+    "Bytes": 18437120
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Card Statements.exe",
+    "Files": 1,
+    "Bytes": 18137600
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Cash Plans.exe",
+    "Files": 1,
+    "Bytes": 17775104
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Cash Timeline.exe",
+    "Files": 1,
+    "Bytes": 18615808
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Classification.exe",
+    "Files": 1,
+    "Bytes": 16307712
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Conditional Rules.exe",
+    "Files": 1,
+    "Bytes": 16923136
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Encrypted Handoff.exe",
+    "Files": 1,
+    "Bytes": 26507264
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Import Coverage.exe",
+    "Files": 1,
+    "Bytes": 16197632
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Import Defaults.exe",
+    "Files": 1,
+    "Bytes": 16706048
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Import Observations.exe",
+    "Files": 1,
+    "Bytes": 16263680
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Imports.exe",
+    "Files": 1,
+    "Bytes": 15051264
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Itemized Bills.exe",
+    "Files": 1,
+    "Bytes": 15669248
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Merchant Review.exe",
+    "Files": 1,
+    "Bytes": 16886784
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Month Close.exe",
+    "Files": 1,
+    "Bytes": 17550848
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Payment Codes.exe",
+    "Files": 1,
+    "Bytes": 16689152
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - PayPal.exe",
+    "Files": 1,
+    "Bytes": 15769088
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - PDF Reuse.exe",
+    "Files": 1,
+    "Bytes": 20759552
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - PDF Tables.exe",
+    "Files": 1,
+    "Bytes": 20782080
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - PDF Templates.exe",
+    "Files": 1,
+    "Bytes": 20631040
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - PDF Viewer.exe",
+    "Files": 1,
+    "Bytes": 23326208
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - QA.exe",
+    "Files": 1,
+    "Bytes": 10980352
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Reconciliation.exe",
+    "Files": 1,
+    "Bytes": 16677376
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Rewards and Debt.exe",
+    "Files": 1,
+    "Bytes": 15779840
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Rollover.exe",
+    "Files": 1,
+    "Bytes": 17592320
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Rules and Refunds.exe",
+    "Files": 1,
+    "Bytes": 15205888
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Savings Goals.exe",
+    "Files": 1,
+    "Bytes": 17054720
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Setup.exe",
+    "Files": 1,
+    "Bytes": 10956800
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Shared Statements.exe",
+    "Files": 1,
+    "Bytes": 17160192
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Spending Trends.exe",
+    "Files": 1,
+    "Bytes": 17737216
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Themes.exe",
+    "Files": 1,
+    "Bytes": 10856448
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Transfers.exe",
+    "Files": 1,
+    "Bytes": 11012096
+  },
+  {
+    "Path": "builds\\Personal Finance Preview - Updated.exe",
+    "Files": 1,
+    "Bytes": 10842112
+  },
+  {
+    "Path": "builds\\Personal Finance Preview.exe",
+    "Files": 1,
+    "Bytes": 10840064
+  },
+  {
+    "Path": "tsconfig.tsbuildinfo",
+    "Files": 1,
+    "Bytes": 981
+  },
+  {
+    "Path": "src-tauri\\icons\\128x128.png",
+    "Files": 1,
+    "Bytes": 2014
+  },
+  {
+    "Path": "src-tauri\\icons\\128x128@2x.png",
+    "Files": 1,
+    "Bytes": 3862
+  },
+  {
+    "Path": "src-tauri\\icons\\32x32.png",
+    "Files": 1,
+    "Bytes": 571
+  },
+  {
+    "Path": "src-tauri\\icons\\64x64.png",
+    "Files": 1,
+    "Bytes": 978
+  },
+  {
+    "Path": "src-tauri\\icons\\icon.icns",
+    "Files": 1,
+    "Bytes": 45349
+  },
+  {
+    "Path": "src-tauri\\icons\\Square107x107Logo.png",
+    "Files": 1,
+    "Bytes": 1663
+  },
+  {
+    "Path": "src-tauri\\icons\\Square142x142Logo.png",
+    "Files": 1,
+    "Bytes": 2157
+  },
+  {
+    "Path": "src-tauri\\icons\\Square150x150Logo.png",
+    "Files": 1,
+    "Bytes": 2357
+  },
+  {
+    "Path": "src-tauri\\icons\\Square284x284Logo.png",
+    "Files": 1,
+    "Bytes": 4281
+  },
+  {
+    "Path": "src-tauri\\icons\\Square30x30Logo.png",
+    "Files": 1,
+    "Bytes": 569
+  },
+  {
+    "Path": "src-tauri\\icons\\Square310x310Logo.png",
+    "Files": 1,
+    "Bytes": 4643
+  },
+  {
+    "Path": "src-tauri\\icons\\Square44x44Logo.png",
+    "Files": 1,
+    "Bytes": 774
+  },
+  {
+    "Path": "src-tauri\\icons\\Square71x71Logo.png",
+    "Files": 1,
+    "Bytes": 1148
+  },
+  {
+    "Path": "src-tauri\\icons\\Square89x89Logo.png",
+    "Files": 1,
+    "Bytes": 1364
+  },
+  {
+    "Path": "src-tauri\\icons\\StoreLogo.png",
+    "Files": 1,
+    "Bytes": 852
+  }
+]

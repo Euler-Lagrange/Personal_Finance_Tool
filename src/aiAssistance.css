@@ -1,0 +1,139 @@
+.assistance-launch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.assistance-launch > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+dialog:has(.assistance-body) {
+  width: min(1100px, 94vw);
+  max-width: 94vw;
+}
+.assistance-body {
+  padding: 0 24px 24px;
+  max-height: 78vh;
+  overflow: auto;
+}
+.assistance-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.assistance-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.assistance-body label.import-check {
+  flex-direction: row;
+  align-items: center;
+}
+.assistance-body fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.assistance-body textarea {
+  resize: vertical;
+  min-height: 120px;
+  width: 100%;
+}
+.assistance-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+  font: 12px/1.6 var(--font-mono, monospace);
+}
+.assistance-body p {
+  line-height: 1.5;
+}
+.assistance-image {
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+}
+.assistance-consent,
+.assistance-job {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+.assistance-body table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.assistance-body th,
+.assistance-body td {
+  padding: 9px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.assistance-body td:last-child {
+  max-width: 350px;
+}
+.assistance-scroll {
+  overflow: auto;
+}
+.assistance-proposal {
+  margin-top: 12px;
+}
+@media (max-width: 780px) {
+  .assistance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.assistance-edit {
+  min-width: 900px;
+}
+.assistance-edit td {
+  min-width: 130px;
+}
+.assistance-edit td:first-child {
+  min-width: 180px;
+}
+.assistance-edit textarea {
+  min-height: 80px;
+}
+.assistance-edit input,
+.assistance-edit select {
+  width: 100%;
+}
+
+.assistance-evidence {
+  flex-basis: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.assistance-evidence li {
+  padding: 6px;
+  overflow-wrap: anywhere;
+}
+
+.assistance-fields {
+  min-width: 700px;
+}
+.assistance-fields td:nth-child(2) {
+  min-width: 170px;
+}
+.assistance-fields td:nth-child(3) {
+  width: 90px;
+}
+.assistance-fields td:last-child {
+  width: 45%;
+}
+.assistance-fields input {
+  width: 100%;
+}
+.assistance-fields textarea {
+  min-height: 64px;
+}

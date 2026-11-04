@@ -1,0 +1,174 @@
+.pdf-documents {
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  border-top: 1px solid var(--line);
+}
+.pdf-heading,
+.pdf-template {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.pdf-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pdf-documents p,
+.pdf-documents small,
+.pdf-form p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.pdf-template {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-alt);
+}
+.pdf-template small {
+  display: block;
+  margin-top: 6px;
+}
+.pdf-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pdf-text {
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 10px;
+}
+.pdf-text summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.pdf-text label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+}
+.pdf-text ol {
+  max-height: 250px;
+  overflow: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  padding-left: 46px;
+  background: var(--surface-alt);
+}
+.pdf-text li {
+  padding-left: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pdf-export {
+  overflow-wrap: anywhere;
+}
+.pdf-form fieldset {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.pdf-form label {
+  display: grid;
+  gap: 7px;
+}
+.pdf-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 12px;
+}
+.pdf-anchor {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 12px;
+}
+.pdf-field,
+.pdf-comparison,
+.pdf-applied {
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  border-radius: 12px;
+}
+.pdf-field strong {
+  display: block;
+  margin-bottom: 12px;
+}
+.pdf-form .pdf-check {
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  gap: 10px;
+  line-height: 1.6;
+}
+.pdf-check input {
+  width: 18px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.pdf-original {
+  min-width: 0;
+  margin: 12px 0;
+}
+.pdf-original summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.pdf-viewer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin: 12px 0;
+}
+.pdf-viewer-controls label {
+  margin: 0;
+  min-width: 80px;
+}
+.pdf-viewer-controls button {
+  min-height: 40px;
+}
+.pdf-canvas-scroll {
+  overflow: auto;
+  max-height: 520px;
+  max-width: 100%;
+  background: var(--surface-alt);
+  border-radius: 8px;
+}
+.pdf-canvas-scroll canvas {
+  display: block;
+  background: white;
+  margin: 12px auto;
+}
+.pdf-values {
+  overflow-x: auto;
+}
+.pdf-values table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pdf-values td,
+.pdf-values th {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+.pdf-values td:nth-child(2) {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pdf-values small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+}

@@ -1,0 +1,173 @@
+.cash-forecast {
+  display: grid;
+  gap: 20px;
+}
+.forecast-controls h2,
+.forecast-timeline h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.forecast-controls p,
+.cash-forecast small,
+.cash-forecast p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.forecast-selects {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.forecast-selects label,
+.forecast-funding label {
+  display: grid;
+  gap: 7px;
+}
+.forecast-selects select {
+  min-width: 160px;
+}
+.forecast-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.forecast-metrics article {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.forecast-metrics span,
+.forecast-context aside span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.forecast-metrics strong {
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+.forecast-metrics small,
+.forecast-context aside small {
+  font-size: 0.8rem;
+}
+.forecast-context {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+.forecast-context aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 1px solid var(--line);
+  padding-left: 24px;
+}
+.forecast-context aside strong {
+  font-size: 1.4rem;
+}
+.forecast-assumptions li {
+  line-height: 1.6;
+  margin: 5px 0;
+}
+.forecast-held {
+  border-left: 3px solid var(--accent);
+}
+.forecast-held article {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  border-top: 1px solid var(--line);
+  padding: 15px 0;
+}
+.forecast-held article small {
+  display: block;
+  margin-top: 5px;
+}
+.forecast-held article b {
+  white-space: nowrap;
+}
+.forecast-table-wrap {
+  overflow-x: auto;
+}
+.forecast-timeline table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.forecast-timeline th,
+.forecast-timeline td {
+  padding: 15px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.forecast-timeline th {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.forecast-timeline td:first-child {
+  white-space: nowrap;
+}
+.forecast-timeline td:nth-child(n + 3),
+.forecast-timeline th:nth-child(n + 3) {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.forecast-timeline td small {
+  display: block;
+  margin: 6px 0;
+}
+.forecast-timeline td p {
+  font-size: 0.8rem;
+  max-width: 540px;
+  margin: 6px 0 0;
+}
+.forecast-out {
+  color: var(--text);
+}
+.forecast-funding {
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+@media (max-width: 1250px) {
+  .forecast-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .forecast-context {
+    grid-template-columns: 1fr;
+  }
+  .forecast-context aside {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 16px 0 0;
+  }
+}
+
+.forecast-controls,
+.forecast-context,
+.forecast-assumptions,
+.forecast-held {
+  padding: 22px;
+}
+.forecast-selects {
+  margin-top: 18px;
+}
+.forecast-controls h2 {
+  margin-bottom: 8px;
+}
+.forecast-held h3,
+.forecast-assumptions h3,
+.forecast-context h3 {
+  margin-bottom: 8px;
+}

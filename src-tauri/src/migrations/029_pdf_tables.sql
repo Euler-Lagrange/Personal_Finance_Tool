@@ -1,0 +1,4 @@
+CREATE TABLE pdf_table_templates(id TEXT PRIMARY KEY,revision INTEGER NOT NULL CHECK(revision>0),enabled INTEGER NOT NULL CHECK(enabled IN(0,1)));
+CREATE TABLE pdf_table_versions(template_id TEXT NOT NULL REFERENCES pdf_table_templates(id),version INTEGER NOT NULL CHECK(version>0),sample_source_id TEXT NOT NULL REFERENCES import_sources(id),definition_json TEXT NOT NULL,proof_json TEXT NOT NULL,PRIMARY KEY(template_id,version));
+CREATE TABLE pdf_table_receipts(id TEXT PRIMARY KEY,payload_hash TEXT NOT NULL);
+CREATE TABLE pdf_table_bindings(source_id TEXT PRIMARY KEY REFERENCES import_sources(id),template_id TEXT NOT NULL,version INTEGER NOT NULL,proof_json TEXT NOT NULL,operation_id TEXT NOT NULL REFERENCES pdf_table_receipts(id),FOREIGN KEY(template_id,version) REFERENCES pdf_table_versions(template_id,version));
