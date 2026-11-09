@@ -4,7 +4,10 @@ import { computeShares, describeSplit, MINE, THEIRS } from "./split";
 import { balance, balanceDelta, whoOwes } from "./balance";
 import { addDays, addMonths, daysInMonth, isISODate, monthLabel, monthOf, weekday } from "./dates";
 import { summarize, type BudgetRow } from "./budget";
-import { biweeklyPeriods, businessDayOnOrBefore, fitLine, grossPay, meanAbsError, predictNet } from "./pay";
+import {
+  biweeklyPeriods, businessDayOnOrBefore, fitLine, fitPay, grossPay, hoursToGoal, isOutsideKnown, meanAbsError, monthDayPeriods, payPeriods,
+  predictNet, predictPaycheck, usBankHolidays,
+} from "./pay";
 
 describe("money", () => {
   it("parses what people type", () => {
@@ -163,5 +166,57 @@ describe("pay", () => {
     expect(predictNet(grossPay(80, 5000), fit)).toBe(280000);
     expect(meanAbsError(points, fit)).toBeLessThan(1e-9);
     expect(fitLine([{ x: 1, y: 1 }])).toBeNull();
+  });
+  it("pays on set days of the month, moved earlier off weekends", () => {
+    // 15 August 2026 is a Saturday; 31 means the last day of the month.
+    const periods = monthDayPeriods([15, 31], "2026-08-01", "2026-09-30");
+    expect(periods.map((p) => p.pay_date)).toEqual(["2026-08-14", "2026-08-31", "2026-09-15", "2026-09-30"]);
+    expect(periods[1]).toEqual({ period_start: "2026-08-16", period_end: "2026-08-31", pay_date: "2026-08-31" });
+    // Periods meet end to start with no day missed or counted twice.
+    const year = monthDayPeriods([15, 31], "2026-01-01", "2026-12-31", { lagDays: 5 });
+    for (let i = 1; i < year.length; i++) expect(year[i].period_start).toBe(new Date(Date.parse(year[i - 1].period_end) + 864e5).toISOString().slice(0, 10));
+    expect(monthDayPeriods([30, 31], "2026-02-01", "2026-02-28").map((p) => p.pay_date)).toEqual(["2026-02-27"]);
+    expect(monthDayPeriods([], "2026-02-01", "2026-02-28")).toEqual([]);
+  });
+  it("lists every pay period that touches a range or is paid in it", () => {
+    const rule = { rule: "biweekly" as const, anchor: "2026-10-19", lagDays: 5, monthDays: [] };
+    const december = payPeriods(rule, "2026-12-01", "2026-12-31", new Set(["2027-01-01"]));
+    expect(december.map((p) => p.pay_date)).toEqual(["2026-12-04", "2026-12-18", "2026-12-31", "2027-01-15"]);
+    expect(december[0].period_end).toBe("2026-11-29");
+    expect(payPeriods({ ...rule, anchor: "" }, "2026-12-01", "2026-12-31")).toEqual([]);
+    const firstOfMonth = payPeriods({ ...rule, rule: "monthdays", monthDays: [1], lagDays: 0 }, "2026-12-01", "2026-12-31", new Set(["2027-01-01"]));
+    expect(firstOfMonth.map((p) => p.pay_date)).toEqual(["2026-12-01", "2026-12-31"]);
+  });
+  it("knows the days banks are closed", () => {
+    const y2026 = Object.fromEntries(usBankHolidays(2026).map((h) => [h.name, h.date]));
+    expect(y2026["Martin Luther King Jr. Day"]).toBe("2026-01-19");
+    expect(y2026["Memorial Day"]).toBe("2026-05-25");
+    expect(y2026["Thanksgiving"]).toBe("2026-11-26");
+    expect(y2026["Independence Day"]).toBe("2026-07-04");
+    expect(y2026["Labor Day"]).toBe("2026-09-07");
+    expect(y2026["Columbus Day"]).toBe("2026-10-12");
+    // Independence Day 2027 is a Sunday, so banks close on the Monday.
+    expect(usBankHolidays(2027).find((h) => h.name === "Independence Day")!.date).toBe("2027-07-05");
+    expect(usBankHolidays(2027)[0]).toEqual({ date: "2027-01-01", name: "New Year's Day" });
+    expect(usBankHolidays(2026)).toHaveLength(11);
+  });
+  it("learns take-home from known paychecks and keeps predictions sensible", () => {
+    const ordinary = [400000, 500000, 600000, 700000, 800000].map((g) => ({ gross_cents: g, net_cents: 0.6 * g + 40000 }));
+    const fit = fitPay([...ordinary, { gross_cents: 600000, net_cents: 0.6 * 600000 + 40000 + 25000, no_benefits: true }])!;
+    expect(fit.n).toBe(5);
+    expect(fit.noBenefitsExtra).toBe(25000);
+    expect(predictPaycheck(750000, fit)).toBe(490000);
+    expect(predictPaycheck(750000, fit, true)).toBe(515000);
+    expect(predictPaycheck(50000, fit)).toBe(50000);
+    expect(predictPaycheck(0, fit)).toBe(0);
+    expect(isOutsideKnown(350000, fit)).toBe(true);
+    expect(isOutsideKnown(820000, fit)).toBe(false);
+    expect(fitPay(ordinary.slice(0, 2))).toBeNull();
+    expect(fitPay(ordinary)!.noBenefitsExtra).toBeNull();
+  });
+  it("counts the hours left to a yearly goal", () => {
+    expect(hoursToGoal(10000000, 9434400, 4800)).toBe(117.9);
+    expect(hoursToGoal(10000000, 10500000, 4800)).toBe(0);
+    expect(hoursToGoal(10000000, 0, 0)).toBeNull();
   });
 });

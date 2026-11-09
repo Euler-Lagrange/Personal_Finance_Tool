@@ -26,5 +26,30 @@
     "month": "2026-12",
     "a": { "Mortgage": 96000, "Electric": 9000, "Groceries": 42000, "Dining out": 18000, "Savings": 90000, "Paycheck": 420000 },
     "b": { "Mortgage": 64000, "Electric": 6000, "Groceries": 28000, "Dining out": 12000, "Savings": 50000, "Paycheck": 280000 }
+  },
+  "pay": {
+    "a": {
+      "rates": [{ "effective_date": "2026-01-01", "rate_cents": 4800 }],
+      "rule": "biweekly",
+      "anchor": "2026-10-19",
+      "lagDays": 5,
+      "usualHours": 80,
+      "sickHoursPerYear": 40,
+      "grossGoalCents": 10000000,
+      "incomeCategory": "Paycheck",
+      "history": [
+        { "gross_cents": 345600, "net_cents": 196120 },
+        { "gross_cents": 384000, "net_cents": 214700 },
+        { "gross_cents": 412800, "net_cents": 229480 },
+        { "gross_cents": 384000, "net_cents": 241900, "no_benefits": true }
+      ]
+    },
+    "b": {
+      "rates": [{ "effective_date": "2026-01-01", "kind": "salaried", "net_per_check_cents": 140000 }],
+      "rule": "monthdays",
+      "monthDays": [15, 31],
+      "lagDays": 0,
+      "incomeCategory": "Paycheck"
+    }
   }
 }

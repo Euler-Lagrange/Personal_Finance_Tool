@@ -18,7 +18,7 @@ Personal details (names, pay rate, real bills and amounts) are deliberately abse
 | Transactions | Transactions tab and the bill-splitting app | One searchable list, paste-to-import, a quick-add row |
 | Budget | Planned / Actual / Diff tables | Planned against actual per category for person A, person B or Household; Month / Year |
 | Bills & Split | Shared bills sheet and the bill-splitting app | Recurring bills with each share, running balance, Settle up, statement export |
-| Pay | Payroll calendar and the hours-to-pay table | Hours calendar, paychecks, predicted against actual pay, paycheck plan |
+| Pay | Payroll calendar and the hours-to-pay table | Hours calendar, paychecks, predicted against real pay, paycheck plan, hours what-if, the year by payday |
 | Savings | Sinking fund rows and the renewals list | Fund balances and targets, yearly renewals, per-paycheck set-aside |
 
 Settings sits behind a gear: people, split, groups, categories, pay profile, API key, theme, backup.
@@ -70,12 +70,18 @@ The balance is one running number: what B owes on entries A paid, minus what A o
 
 ## Pay calendar (milestone 5)
 
-- **Calendar:** Monday-to-Sunday month grid. Hours per day; week totals; each pay period shaded and labelled with its payday. Day tags: Worked, Sick, Holiday, Off.
-- **Paychecks:** rows with period start, period end and payday, generated from a schedule rule (biweekly: two weeks, paid a set number of days after, moved earlier off weekends and holidays) and editable by hand. A per-paycheck "no benefits deduction" tick.
-- **Two predictions side by side:** (1) from history, a straight-line fit of take-home against gross over known paychecks; (2) from tax rules, hours times rate minus the pay profile's deductions and withholding, using one editable rates file per tax year. A setting picks which feeds planned income; each keeps its miss against the real deposit.
-- **Paycheck plan:** predicted net, minus bills due before the next payday, minus savings transfers.
-- **Year strip:** hours, gross and net to date, and hours needed to reach a gross target.
-- A salaried person is a fixed net amount on their paydays, with no calendar.
+- **Calendar:** Monday-to-Sunday month grid. Hours per day; week totals; each pay period shaded and its payday marked. Day tags: Worked, Sick, Holiday, Off. Sick hours count as paid.
+- **Schedule:** every two weeks from any Monday that began a real pay period, paid a set number of days after it ends; or on set days of the month. A payday moves to the business day before a weekend, a United States bank holiday, or a day the person tagged Holiday.
+- **Paychecks** follow the schedule and are worked out each time. A paycheck is stored only once something is typed on it: the real take-home, the gross from the stub, changed dates, or the "no benefits taken out" tick. Emptying what was typed hands it back to the schedule. Stored paychecks keep their dates if the schedule later changes, and the schedule fills in around them.
+- **Prediction from history:** a straight line of take-home against gross through known paychecks (a typed list, plus every paycheck whose real take-home is filled in). At least three are needed. A paycheck with no benefits taken out is kept off the line and teaches how much extra such a paycheck brings. A prediction is never below zero or above gross, and is marked as rough when the gross is well outside the known ones.
+- **Usual hours:** a pay period that is not over yet is predicted at the usual hours per paycheck until more are logged.
+- **Prediction from tax rules:** not built. Hours times rate minus the pay profile's deductions and withholding, from one editable rates file per tax year. It needs two real pay stubs to check against.
+- **Paycheck plan:** each paycheck shows the person's share of bills dated from that payday up to the next, and what is left. Savings transfers join in milestone 6.
+- **Planned income:** one button sets the month's planned paycheck income to what the paychecks landing in that month are expected to bring home.
+- **The year, by payday:** hours, gross, take-home, sick hours used, and hours still needed to reach a yearly gross goal.
+- **What if:** type a number of hours and see the gross, the take-home, and what one more hour adds.
+- A person on a fixed paycheck has a take-home amount on their paydays and no calendar.
+- A raise is a new rate with a start date. Paychecks for earlier pay periods keep the old rate.
 
 ## Savings, renewals, year view (milestone 6)
 
@@ -127,9 +133,9 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 | `merchants` | Merchant name with the category and split last used |
 | `imports` | One row per pasted batch, for undo |
 | `balance_checks` | Account, owner, date, balance |
-| `paychecks` | Person, period, payday, no-benefits tick, actual gross and net |
+| `paychecks` | Only paychecks with something typed on them: person, period, payday, no-benefits tick, real gross and take-home. The rest are worked out from the schedule |
 | `work_days` | Date, person, hours, tag |
-| `pay_profiles` | Rate or salary with effective date, schedule rule, withholding fields, deduction lines |
+| `pay_profiles` | One row per rate: hourly rate or fixed take-home with its start date. Each row also carries the person's schedule, usual hours, yearly goal and known paychecks. Withholding fields and deduction lines are unused until the tax-rule prediction |
 | `settings` | People, default split, presets, groups, targets, opening balance, revision counter |
 
 ## Build order
@@ -138,7 +144,7 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 2. **Entries, split and budget:** quick-add, both budgets, balance, dashboard. *Built.*
 3. **Screenshot import**, balance snapshots, missing-entries check.
 4. **Bills & Split:** recurring templates, statement. *Built.* The bills-went-out check follows milestone 3.
-5. **Pay calendar** and predictions, paycheck-landed check.
+5. **Pay calendar** and predictions. *Built, except the tax-rule prediction, which waits for pay stubs.* The paycheck-landed check follows milestone 3.
 6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC.
 
 Each milestone is used on real data before the next begins. See [STATUS.md](STATUS.md).

@@ -203,3 +203,58 @@ select.cell.boxed, .quickadd select, .bulkbar select.cell { appearance: auto; }
 .table.bills th { padding: 9px 6px; }
 .month-cell { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .month-cell .tag { margin: 0; }
+
+/* pay */
+.toolbar .grow { flex: 1; }
+.grid.pay { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+.cal { display: flex; flex-direction: column; gap: 4px; }
+.cal-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) 52px; gap: 4px; }
+.cal-head { color: var(--muted); font-size: 12px; padding: 0 6px 2px; }
+.cal-head span:last-child { text-align: right; }
+.cal-day { display: flex; flex-direction: column; gap: 2px; min-height: 84px; padding: 5px 6px; border-radius: 9px; border: 1px solid var(--line); min-width: 0; }
+.cal-day.band-a { background: color-mix(in srgb, var(--accent-text) 9%, var(--surface)); }
+.cal-day.band-b { background: var(--surface); }
+.cal-day.out .cal-num { color: var(--subtle); }
+.cal-day.today { border-color: var(--accent-text); }
+.cal-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 18px; }
+.cal-num { font-size: 12px; color: var(--muted); }
+.tag.payday { margin: 0; background: var(--accent-soft); color: var(--accent-text); }
+input.cal-hours { width: 100%; min-height: 28px; padding: 2px 6px; text-align: center; font: 600 15px/1.2 var(--number-font); border-color: transparent; background: transparent; }
+input.cal-hours:hover, input.cal-hours:focus { border-color: var(--input-border); background: var(--surface); }
+input.cal-hours.invalid, .whatif-hours input.invalid { border-color: var(--danger); }
+select.cal-tag { min-height: 20px; padding: 0 2px; font-size: 11px; color: var(--subtle); border-color: transparent; background: transparent; appearance: none; text-align: center; text-align-last: center; cursor: pointer; }
+select.cal-tag:hover, select.cal-tag:focus { color: var(--text); border-color: var(--input-border); }
+/* An ordinary worked day keeps quiet until the pointer or keyboard reaches it. */
+.cal-day:not(.is-sick):not(.is-holiday):not(.is-off) select.cal-tag { opacity: 0; }
+.cal-day:hover select.cal-tag, .cal-day:focus-within select.cal-tag { opacity: 1 !important; }
+.cell.amount.typed { color: var(--accent-text); font-weight: 600; }
+.cal-day.is-sick select.cal-tag, .cal-day.is-holiday select.cal-tag, .cal-day.is-off select.cal-tag { color: var(--accent-text); font-weight: 600; }
+.cal-holiday { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; min-width: 0; }
+.cal-week { display: flex; align-items: center; justify-content: flex-end; font-family: var(--number-font); color: var(--muted); padding-right: 4px; }
+.cal-note { margin-top: 10px; }
+.whatif-hours { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: var(--muted); }
+.whatif-hours input { width: 84px; text-align: center; font: 600 16px/1.2 var(--number-font); }
+.whatif { margin-top: 6px !important; }
+.goal { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.strip { display: flex; align-items: flex-end; gap: 2px; height: 44px; margin: 12px 0 6px; }
+.strip span { flex: 1; min-width: 2px; border-radius: 2px 2px 0 0; background: color-mix(in srgb, var(--accent-text) 26%, var(--surface)); }
+.strip span.real { background: var(--accent-text); }
+.table.paychecks td { vertical-align: top; padding-top: 7px; }
+.table.paychecks td.wide { min-width: 190px; padding-left: 10px; }
+.table.paychecks .cell.amount { width: 96px; min-width: 0; }
+.table.paychecks th.check, .table.paychecks td.check { text-align: center; width: 78px; }
+.pay-period { display: block; }
+.pay-dates { display: flex; flex-direction: column; gap: 2px; }
+.pay-dates label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.pay-dates label span { width: 34px; }
+.pay-dates .cell.date { border-color: var(--input-border) !important; }
+.bills-due summary { cursor: pointer; list-style-position: inside; }
+.bills-due ul { margin-top: 4px !important; font-size: 12px; }
+.bills-due li { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; white-space: nowrap; }
+.pay-income { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pay-settings h3 { margin-bottom: 6px; }
+.table-wrap.known { max-height: 264px; overflow-y: auto; max-width: 560px; margin: 8px 0; }
+.table-wrap.known .cell.amount { width: 110px; }
+.known-add { margin-top: 8px; }
+.known-add input:not([type="checkbox"]) { width: 120px; }
+.next-pay + .next-pay { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }

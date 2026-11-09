@@ -4,14 +4,24 @@ import path from "node:path";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Pictures of a screen in a second state: the screen's route, a dash, then a name. */
+const VARIANTS: Record<string, string> = {
+  "pay-settings": `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Pay settings").click()`,
+  "pay-fixed": `[...document.querySelectorAll(".toolbar .segmented button")][1].click()`,
+};
+
 /** Dev helper: visit each screen, save a picture of it, then quit. */
 export async function takeShots(win: BrowserWindow, dir: string): Promise<void> {
   fs.mkdirSync(dir, { recursive: true });
-  const routes = (process.env.FINANCE_SHOT_ROUTES ?? "dashboard,transactions,budget,split,pay,savings,settings").split(",");
+  const routes = (process.env.FINANCE_SHOT_ROUTES ?? "dashboard,transactions,budget,split,pay,pay-settings,pay-fixed,savings,settings").split(",");
   await wait(1200);
   for (const route of routes) {
-    await win.webContents.executeJavaScript(`location.hash = "#/${route}"`);
+    await win.webContents.executeJavaScript(`location.hash = "#/${route.split("-")[0]}"`);
     await wait(500);
+    if (VARIANTS[route]) {
+      await win.webContents.executeJavaScript(VARIANTS[route]);
+      await wait(600);
+    }
     const height = (await win.webContents.executeJavaScript("Math.max(document.querySelector('.content')?.scrollHeight ?? 0, 0) + 90")) as number;
     win.setContentSize(1320, Math.min(Math.max(height, 880), 2400));
     await wait(350);
@@ -39,9 +49,9 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
   };
   // A stuck step must fail the run, not hang it.
   const watchdog = setTimeout(() => {
-    check("smoke run finished in time", false, "timed out after 90 seconds");
+    check("smoke run finished in time", false, "timed out after 120 seconds");
     finish();
-  }, 90_000);
+  }, 120_000);
   const month = new Date().toISOString().slice(0, 7);
   const find = `(await rpc("entries.list", { month: "${month}" })).find((e) => e.description === "Smoke test market")`;
   try {
@@ -103,6 +113,42 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
       commit(rowOf("Smoke gym").querySelector('input[aria-label="Smoke gym this month"]'), "45.50"); await sleep(500);`);
     b = await page(`return ${findBill};`);
     check("ticking Paid and changing this month's amount are saved", !!b?.entry && b.entry.seen_in_bank && b.entry.amount_cents === 4550, b);
+
+    // ---- pay: the demo household has Alex paid by the hour and Sam on a fixed paycheck ----
+    const payMonth = `(await rpc("pay.month", { person: "a", month: "${todayISO.slice(0, 7)}" }))`;
+    await page(`location.hash = "#/pay"; await sleep(900);
+      commit(document.querySelector(".cal-day:not(.out) .cal-hours"), "9.5"); await sleep(500);
+      setValue(document.querySelector(".cal-day:not(.out) select.cal-tag"), "sick"); await sleep(500);`);
+    const day = await page<{ hours: number; tag: string } | undefined>(`return ${payMonth}.days.find((d) => d.date === "${todayISO.slice(0, 7)}-01");`);
+    check("hours and a sick tag typed in the calendar are saved", day?.hours === 9.5 && day.tag === "sick", day);
+
+    await page(`const rows = document.querySelectorAll("table.paychecks tbody tr");
+      commit(rows[rows.length - 1].querySelector('input[aria-label^="Real take-home"]'), "2100.00"); await sleep(600);`);
+    let lastCheck = await page<{ id: number | null; actual_net_cents: number | null }>(`return ${payMonth}.paychecks.at(-1);`);
+    check("a real take-home typed on a paycheck is stored", lastCheck.actual_net_cents === 210000 && lastCheck.id !== null, lastCheck);
+    await page(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Undo").click(); await sleep(600);`);
+    lastCheck = await page(`return ${payMonth}.paychecks.at(-1);`);
+    check("undo hands that paycheck back to the schedule", lastCheck.actual_net_cents === null && lastCheck.id === null, lastCheck);
+
+    await page(`setValue(document.querySelector(".whatif-hours input"), "90"); await sleep(700);`);
+    const whatIf = await page<string>(`return document.querySelector("ul.whatif")?.textContent ?? "";`);
+    check("the what-if works out pay for the hours typed", whatIf.includes("$4,320.00") && whatIf.includes("Take-home$"), whatIf);
+
+    await page(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith("Plan $")).click(); await sleep(700);`);
+    const income = await page<{ expected_cents: number; planned_cents: number }>(`return ${payMonth}.income;`);
+    check("planning income from the paychecks sets the budget", income.expected_cents > 0 && income.planned_cents === income.expected_cents, income);
+
+    await page(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Pay settings").click(); await sleep(500);
+      const form = document.querySelector(".pay-settings form");
+      setValue(form.querySelector('input[inputmode="decimal"]'), "50.00"); form.requestSubmit(); await sleep(800);`);
+    const profile = await page<{ current: { rate_cents: number }; rates: unknown[]; schedule: { history: unknown[] } }>(`return await rpc("pay.profile", { person: "a" });`);
+    check("a rate corrected in Pay settings is saved and keeps the known paychecks", profile.current.rate_cents === 5000 && profile.rates.length === 1 && profile.schedule.history.length === 10, profile.current);
+
+    await page(`[...document.querySelectorAll(".toolbar .segmented button")].find((b) => b.textContent.trim() === "Sam").click(); await sleep(800);`);
+    const fixed = await page<{ heads: string[]; calendar: boolean; rows: number }>(
+      `return { heads: [...document.querySelectorAll("table.paychecks thead th")].map((th) => th.textContent.trim()), calendar: !!document.querySelector(".cal"), rows: document.querySelectorAll("table.paychecks tbody tr").length };`,
+    );
+    check("someone on a fixed paycheck gets paydays and no hours calendar", fixed.heads.includes("Expected") && !fixed.heads.includes("Hours") && !fixed.calendar && fixed.rows >= 2, fixed);
 
     const pdf = path.join(path.dirname(reportFile), "statement.pdf");
     await page(`await rpc("statement.write", { month: "${todayISO.slice(0, 7)}", person: "b", file: ${JSON.stringify(pdf)} });`);

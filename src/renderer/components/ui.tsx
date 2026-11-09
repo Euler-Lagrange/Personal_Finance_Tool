@@ -16,6 +16,8 @@ export function AmountInput(props: {
   className?: string;
   placeholder?: string;
   allowZero?: boolean;
+  /** When given, emptying the box is allowed and calls this. */
+  onClear?: () => void;
 }) {
   const initial = props.cents === null ? "" : moneyInput(props.cents);
   const [text, setText] = useState(initial);
@@ -28,6 +30,10 @@ export function AmountInput(props: {
   }
   const commit = () => {
     if (text.trim() === initial || (text.trim() === "" && props.cents === null)) return setBad(false);
+    if (text.trim() === "" && props.onClear) {
+      setBad(false);
+      return props.onClear();
+    }
     const cents = parseMoney(text);
     if (cents === null || (cents === 0 && !props.allowZero)) return setBad(true);
     setBad(false);

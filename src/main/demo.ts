@@ -1,5 +1,5 @@
 import type { CoreApi } from "./api";
-import { addMonths, monthOf, toISO } from "../core/dates";
+import { addDays, addMonths, monthOf, toISO, weekday } from "../core/dates";
 
 /** Made-up household used for screenshots and for trying the app. Never real data. */
 export function loadDemo(api: CoreApi, today: Date = new Date()): void {
@@ -58,4 +58,43 @@ export function loadDemo(api: CoreApi, today: Date = new Date()): void {
   add(1, "Transfer to savings", 90000, "Savings", "a", 100);
   add(2, "Transfer to savings", 50000, "Savings", "b", 0);
   api["entries.create"]({ date: day(5), description: "Settle up", amount_cents: 10000, kind: "settlement", category_id: null, paid_by: "b" });
+  loadDemoPay(api, toISO(today));
+}
+
+/** Alex is paid by the hour every two weeks; Sam gets the same paycheck twice a month. */
+function loadDemoPay(api: CoreApi, today: string): void {
+  const thisMonday = addDays(today, -((weekday(today) + 6) % 7));
+  api["setup.import"]({
+    pay: {
+      a: {
+        rates: [{ effective_date: `${Number(today.slice(0, 4)) - 1}-01-01`, rate_cents: 4800 }],
+        anchor: addDays(thisMonday, -56),
+        sickHoursPerYear: 40,
+        usualHours: 80,
+        grossGoalCents: 10000000,
+        incomeCategory: "Paycheck",
+        history: [
+          [345600, 196120], [364800, 205410], [374400, 210380], [384000, 214700], [384000, 215190], [393600, 219640],
+          [403200, 224310], [412800, 229480], [432000, 238260], [384000, 241900, 1],
+        ].map(([gross_cents, net_cents, special]) => ({ gross_cents, net_cents, ...(special ? { no_benefits: true } : {}) })),
+      },
+      b: { rates: [{ effective_date: `${Number(today.slice(0, 4)) - 1}-01-01`, kind: "salaried", net_per_check_cents: 141000 }], rule: "monthdays", monthDays: [15, 31], lagDays: 0, incomeCategory: "Paycheck" },
+    },
+  });
+  // Hours since the start of the year: mostly eight-hour weekdays, a few long days, a sick day now and then.
+  const year = today.slice(0, 4);
+  for (let date = `${year}-01-01`, i = 0; date < today; date = addDays(date, 1), i++) {
+    if (weekday(date) === 0 || weekday(date) === 6) continue;
+    api["pay.setDay"]({ person: "a", date, hours: i % 9 === 0 ? 10 : i % 7 === 0 ? 8.5 : 8, tag: i % 61 === 16 ? "sick" : "worked" });
+  }
+  // Every paycheck that has landed came in close to what was predicted.
+  const landed = new Map<string, number>();
+  for (let month = `${year}-01`; month <= monthOf(today); month = addMonths(month, 1)) {
+    for (const p of api["pay.month"]({ person: "a", month }).paychecks) {
+      if (p.pay_date < today && p.pay_date.startsWith(year) && p.predicted_net_cents !== null) landed.set(p.period_start, p.predicted_net_cents);
+    }
+  }
+  [...landed].forEach(([period_start, predicted], i) => {
+    api["pay.updatePaycheck"]({ person: "a", id: null, period_start, patch: { actual_net_cents: predicted + (((i * 37) % 41) - 20) * 90 } });
+  });
 }

@@ -1,11 +1,15 @@
 import { all, get, run, tx, type Db, type Row } from "./db";
 import { balance, balanceDelta, type BalanceEntry, type EntryKind } from "../core/balance";
 import { summarize, type BudgetRow } from "../core/budget";
-import { daysInMonth, isISODate, isMonth, monthOf } from "../core/dates";
+import { addDays, addMonths, daysInMonth, isISODate, isMonth, monthOf, toISO, weekday } from "../core/dates";
+import { fitPay, grossPay, hoursToGoal, isOutsideKnown, payPeriods, predictPaycheck, usBankHolidays, type PayPeriod } from "../core/pay";
 import type { StatementData, StatementLine } from "../core/statement";
 import type { Cents } from "../core/money";
 import { computeShares, isValidSplit, MINE, THEIRS, type Person, type SplitSpec } from "../core/split";
-import type { BillInput, BillRow, Category, Entry, EntryInput, EntryPatch, Settings, SetupFile, TemplateSplit, View } from "../shared/types";
+import type {
+  BillInput, BillRow, Category, DayTag, Entry, EntryInput, EntryPatch, KnownPaycheck, PayMonth, PayProfile, PayProfileInput, PayRate, PaySchedule,
+  PaySetup, PaycheckPatch, PaycheckView, Settings, SetupFile, TemplateSplit, View,
+} from "../shared/types";
 
 /** A message meant for the person using the app, shown next to the control that caused it. */
 export class UserError extends Error {}
@@ -51,6 +55,9 @@ const KEYS: Record<string, string[]> = {
   months: ["month", "person"],
   settings: ["key"],
   recurring: ["id"],
+  pay_profiles: ["id"],
+  paychecks: ["id"],
+  work_days: ["date", "person"],
 };
 
 interface UndoOp {
@@ -68,6 +75,7 @@ const isPerson = (p: unknown): p is Person => p === "a" || p === "b";
 
 export function createApi(db: Db, opts: { now?: () => Date } = {}) {
   const now = () => (opts.now ? opts.now() : new Date()).toISOString();
+  const today = () => toISO(opts.now ? opts.now() : new Date());
   const undoStack: UndoItem[] = [];
   let recording: UndoOp[] | null = null;
 
@@ -782,6 +790,405 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     });
   }
 
+  // ---- pay ----------------------------------------------------------------
+
+  const DEFAULT_SCHEDULE: PaySchedule = { rule: "biweekly", anchor: "", lagDays: 5, monthDays: [15, 31], sickHoursPerYear: 0, usualHours: 0, grossGoalCents: null, incomeCategoryId: null, history: [] };
+  const TAGS: DayTag[] = ["worked", "sick", "holiday", "off"];
+
+  const payRates = (person: Person): PayRate[] =>
+    all<Row>(db, "select * from pay_profiles where person = ? order by effective_date, id", person).map((r) => ({
+      id: r.id as number,
+      effective_date: r.effective_date as string,
+      kind: r.kind as PayRate["kind"],
+      rate_cents: (r.rate_cents as number) ?? null,
+      net_per_check_cents: (r.net_per_check_cents as number) ?? null,
+    }));
+  /** The rate in force on a date: the latest one that has started, or the first if none has yet. */
+  const rateAt = (rates: PayRate[], date: string) => [...rates].reverse().find((r) => r.effective_date <= date) ?? rates[0];
+
+  function getPayProfile(args: { person: Person }): PayProfile | null {
+    if (!isPerson(args.person)) throw new UserError("Choose whose pay this is");
+    const rates = payRates(args.person);
+    if (rates.length === 0) return null;
+    // A rate row added a moment ago has no schedule yet, so read it from one that does.
+    const stored = get<{ s: string }>(db, "select schedule_json s from pay_profiles where person = ? and schedule_json is not null order by effective_date desc, id desc limit 1", args.person)?.s;
+    return { person: args.person, current: rateAt(rates, today()), rates, schedule: { ...DEFAULT_SCHEDULE, ...(JSON.parse(stored ?? "{}") as Partial<PaySchedule>) } };
+  }
+  const profileOf = (person: Person): PayProfile => {
+    const profile = getPayProfile({ person });
+    if (!profile) throw new UserError("Set up pay first");
+    return profile;
+  };
+
+  /** The schedule is one thing per person, kept on every one of their rate rows. */
+  function writeSchedule(person: Person, schedule: PaySchedule) {
+    for (const r of payRates(person)) record("pay_profiles", { id: r.id });
+    run(db, "update pay_profiles set schedule_json = ? where person = ?", JSON.stringify(schedule), person);
+  }
+
+  function checkSchedule(s: PaySchedule) {
+    if (s.rule !== "biweekly" && s.rule !== "monthdays") throw new UserError("Choose how often the pay arrives");
+    if (!Number.isInteger(s.lagDays) || s.lagDays < 0 || s.lagDays > 31) throw new UserError("Enter how many days after a pay period ends the pay arrives, from 0 to 31");
+    if (s.rule === "biweekly" && (!isISODate(s.anchor) || weekday(s.anchor) !== 1)) throw new UserError("Enter a Monday that starts a pay period");
+    if (s.rule === "monthdays" && (!Array.isArray(s.monthDays) || s.monthDays.length === 0 || s.monthDays.some((d) => !Number.isInteger(d) || d < 1 || d > 31)))
+      throw new UserError("Enter the paydays as days of the month, such as 15 and 31");
+    if (!Number.isFinite(s.sickHoursPerYear) || s.sickHoursPerYear < 0) throw new UserError("Enter sick hours per year, or 0");
+    if (!Number.isFinite(s.usualHours) || s.usualHours < 0 || s.usualHours > 400) throw new UserError("Enter the usual hours in a paycheck, or 0");
+    if (s.grossGoalCents !== null && (!Number.isInteger(s.grossGoalCents) || s.grossGoalCents <= 0)) throw new UserError("Enter a yearly gross goal, or leave it empty");
+    if (s.incomeCategoryId !== null && get<{ kind: string }>(db, "select kind from categories where id = ?", s.incomeCategoryId)?.kind !== "income") throw new UserError("Choose an income category");
+    checkKnown(s.history);
+  }
+  function checkKnown(history: KnownPaycheck[]) {
+    for (const h of history) {
+      if (!Number.isInteger(h.gross_cents) || !Number.isInteger(h.net_cents) || h.gross_cents <= 0 || h.net_cents <= 0) throw new UserError("Each known paycheck needs a gross amount and a take-home amount");
+      if (h.net_cents > h.gross_cents) throw new UserError("Take-home cannot be more than gross");
+    }
+  }
+  function checkRate(kind: string, rate: Cents | null, net: Cents | null) {
+    if (kind !== "hourly" && kind !== "salaried") throw new UserError("Choose hourly or salaried");
+    if (kind === "hourly" && (!Number.isInteger(rate) || rate! <= 0)) throw new UserError("Enter the hourly rate");
+    if (kind === "salaried" && (!Number.isInteger(net) || net! <= 0)) throw new UserError("Enter the take-home pay per paycheck");
+  }
+  function writeRate(person: Person, r: { effective_date: string; kind: string; rate_cents: Cents | null; net_per_check_cents: Cents | null }) {
+    if (!isISODate(r.effective_date)) throw new UserError("Enter the date this pay started");
+    const rate = r.kind === "hourly" ? r.rate_cents : null;
+    const net = r.kind === "hourly" ? null : r.net_per_check_cents;
+    checkRate(r.kind, rate, net);
+    const same = get<{ id: number }>(db, "select id from pay_profiles where person = ? and effective_date = ?", person, r.effective_date);
+    if (same) {
+      record("pay_profiles", { id: same.id });
+      run(db, "update pay_profiles set kind = ?, rate_cents = ?, net_per_check_cents = ? where id = ?", r.kind, rate, net, same.id);
+    } else {
+      const id = run(db, "insert into pay_profiles (person, effective_date, kind, rate_cents, net_per_check_cents) values (?, ?, ?, ?, ?)", person, r.effective_date, r.kind, rate, net)
+        .lastInsertRowid as number;
+      record("pay_profiles", { id }, true);
+    }
+  }
+
+  /** Saves how a person is paid. A start date that already has a rate corrects it; a new date adds a rate from then on. */
+  function savePayProfile(input: PayProfileInput): PayProfile {
+    return mutate("Change pay settings", () => {
+      if (!isPerson(input.person)) throw new UserError("Choose whose pay this is");
+      const schedule: PaySchedule = {
+        rule: input.rule,
+        anchor: input.anchor,
+        lagDays: input.lagDays,
+        monthDays: Array.isArray(input.monthDays) ? [...new Set(input.monthDays)].sort((x, y) => x - y) : [],
+        sickHoursPerYear: input.sickHoursPerYear,
+        usualHours: input.usualHours,
+        grossGoalCents: input.grossGoalCents,
+        incomeCategoryId: input.incomeCategoryId,
+        history: getPayProfile({ person: input.person })?.schedule.history ?? [],
+      };
+      checkSchedule(schedule);
+      writeRate(input.person, input);
+      writeSchedule(input.person, schedule);
+      return profileOf(input.person);
+    });
+  }
+
+  function removePayRate(args: { id: number }): void {
+    mutate("Remove pay rate", () => {
+      const row = readRow("pay_profiles", { id: args.id });
+      if (!row) throw new UserError("That rate no longer exists");
+      if (payRates(row.person as Person).length <= 1) throw new UserError("Keep at least one rate");
+      record("pay_profiles", { id: args.id });
+      run(db, "delete from pay_profiles where id = ?", args.id);
+    });
+  }
+
+  /** Replaces the list of known past paychecks that predictions learn from. */
+  function setPayHistory(args: { person: Person; history: KnownPaycheck[] }): void {
+    mutate("Change known paychecks", () => {
+      const profile = profileOf(args.person);
+      checkKnown(args.history);
+      writeSchedule(args.person, {
+        ...profile.schedule,
+        history: args.history.map((h) => ({ gross_cents: h.gross_cents, net_cents: h.net_cents, ...(h.no_benefits ? { no_benefits: true } : {}) })),
+      });
+    });
+  }
+
+  function setWorkDay(args: { person: Person; date: string; hours: number; tag: DayTag }): void {
+    mutate("Change hours", () => {
+      if (!isPerson(args.person) || !isISODate(args.date)) throw new UserError("That day is not valid");
+      if (!Number.isFinite(args.hours) || args.hours < 0 || args.hours > 24) throw new UserError("Enter hours from 0 to 24");
+      if (!TAGS.includes(args.tag)) throw new UserError("Choose worked, sick, holiday or off");
+      const hours = args.tag === "off" ? 0 : Math.round(args.hours * 100) / 100;
+      record("work_days", { date: args.date, person: args.person });
+      if (hours === 0 && args.tag === "worked") run(db, "delete from work_days where date = ? and person = ?", args.date, args.person);
+      else
+        run(
+          db,
+          "insert into work_days (date, person, hours, tag) values (?, ?, ?, ?) on conflict (date, person) do update set hours = excluded.hours, tag = excluded.tag",
+          args.date, args.person, hours, args.tag,
+        );
+    });
+  }
+
+  /** A paycheck as stored, or as the schedule gives it when nothing has been typed on it (id null). */
+  interface Check extends PayPeriod {
+    id: number | null;
+    actual_gross_cents: Cents | null;
+    actual_net_cents: Cents | null;
+    no_benefits: boolean;
+  }
+  const storedChecks = (person: Person): Check[] =>
+    all<Row>(db, "select * from paychecks where person = ? order by pay_date, id", person).map((r) => ({
+      id: r.id as number,
+      period_start: r.period_start as string,
+      period_end: r.period_end as string,
+      pay_date: r.pay_date as string,
+      actual_gross_cents: (r.actual_gross_cents as number) ?? null,
+      actual_net_cents: (r.actual_net_cents as number) ?? null,
+      no_benefits: r.no_benefits === 1,
+    }));
+  const touches = (p: PayPeriod, from: string, to: string) => (p.period_end >= from && p.period_start <= to) || (p.pay_date >= from && p.pay_date <= to);
+
+  /** Days a payday cannot land on: bank holidays, and days this person tagged as a holiday. */
+  function closedDays(person: Person, from: string, to: string): Set<string> {
+    const days = new Set(all<{ date: string }>(db, "select date from work_days where person = ? and tag = 'holiday'", person).map((r) => r.date));
+    for (let y = Number(from.slice(0, 4)) - 1; y <= Number(to.slice(0, 4)) + 1; y++) for (const h of usBankHolidays(y)) days.add(h.date);
+    return days;
+  }
+  const scheduled = (person: Person, schedule: PaySchedule, from: string, to: string): PayPeriod[] => payPeriods(schedule, from, to, closedDays(person, from, to));
+
+  /** Paychecks touching a range: the stored ones, plus the schedule's wherever no stored one overlaps. */
+  function checksBetween(person: Person, schedule: PaySchedule, from: string, to: string): Check[] {
+    const stored = storedChecks(person);
+    const fromSchedule = scheduled(person, schedule, from, to)
+      .filter((p) => !stored.some((s) => s.period_start <= p.period_end && s.period_end >= p.period_start))
+      .map((p): Check => ({ id: null, ...p, actual_gross_cents: null, actual_net_cents: null, no_benefits: false }));
+    return [...stored.filter((c) => touches(c, from, to)), ...fromSchedule].sort((x, y) => x.pay_date.localeCompare(y.pay_date) || x.period_start.localeCompare(y.period_start));
+  }
+
+  const hoursIn = (person: Person, from: string, to: string) =>
+    get<{ h: number | null }>(db, "select sum(hours) h from work_days where person = ? and date >= ? and date <= ?", person, from, to)!.h ?? 0;
+
+  /** Everything predictions can learn from: the typed list of past paychecks, and paychecks with their real take-home filled in. */
+  function knownPaychecks(profile: PayProfile): KnownPaycheck[] {
+    const filledIn = storedChecks(profile.person).flatMap((c): KnownPaycheck[] => {
+      if (!c.actual_net_cents) return [];
+      const rate = rateAt(profile.rates, c.period_end);
+      if (rate.kind !== "hourly") return [];
+      const gross = c.actual_gross_cents ?? grossPay(hoursIn(profile.person, c.period_start, c.period_end), rate.rate_cents ?? 0);
+      return gross > 0 ? [{ gross_cents: gross, net_cents: c.actual_net_cents, no_benefits: c.no_benefits }] : [];
+    });
+    return [...profile.schedule.history, ...filledIn];
+  }
+
+  /** One person's share of the bills dated from `from` up to, but not on, `before`. */
+  function billsDue(person: Person, from: string, before: string): PaycheckView["bills"] {
+    const out: PaycheckView["bills"] = [];
+    const templates = all<Row>(db, "select * from recurring where cadence = 'monthly'");
+    for (let month = monthOf(from); month <= monthOf(addDays(before, -1)); month = addMonths(month, 1)) {
+      for (const t of templates) {
+        const entry = billEntry(t.id as number, month);
+        if (entry) {
+          if ((entry.date as string) < from || (entry.date as string) >= before) continue;
+          const cents = get<{ c: number }>(db, `select sum(${person}_cents) c from entries where id = ? or split_of = ?`, entry.id, entry.id)!.c;
+          out.push({ name: t.name as string, date: entry.date as string, cents });
+        } else if (t.active === 1 && (t.amount_cents as number) > 0 && (t.last_generated === null || (t.last_generated as string) < month)) {
+          const date = dueDate(month, (t.due_day as number) ?? 1);
+          if (date < from || date >= before) continue;
+          out.push({ name: t.name as string, date, cents: computeShares(t.amount_cents as number, resolveSplit(JSON.parse(t.split_json as string) as TemplateSplit))[person] });
+        }
+      }
+    }
+    return out.sort((x, y) => x.date.localeCompare(y.date) || x.name.localeCompare(y.name));
+  }
+
+  function paycheckViews(profile: PayProfile, from: string, to: string, withBills: boolean): PaycheckView[] {
+    const person = profile.person;
+    const fit = fitPay(knownPaychecks(profile));
+    // Look far enough ahead that the last paycheck shown knows when the next one lands.
+    const checks = checksBetween(person, profile.schedule, from, addDays(to, 62));
+    return checks.flatMap((c, i): PaycheckView[] => {
+      if (!touches(c, from, to)) return [];
+      const rate = rateAt(profile.rates, c.period_end);
+      const hourly = rate.kind === "hourly";
+      const hours = hoursIn(person, c.period_start, c.period_end);
+      const gross = hourly ? grossPay(hours, rate.rate_cents ?? 0) : 0;
+      // A pay period still under way is predicted at the usual hours until more than that are logged.
+      const usual = profile.schedule.usualHours;
+      const assumed = hourly && c.actual_gross_cents === null && c.period_end >= today() && usual > hours ? usual : null;
+      const basis = c.actual_gross_cents ?? (assumed !== null ? grossPay(assumed, rate.rate_cents ?? 0) : gross);
+      const next = checks[i + 1]?.pay_date ?? addDays(c.pay_date, 14);
+      const bills = withBills ? billsDue(person, c.pay_date, next) : [];
+      return [
+        {
+          ...c,
+          kind: rate.kind,
+          hours,
+          gross_cents: gross,
+          assumed_hours: assumed,
+          predicted_net_cents: hourly ? (fit && basis > 0 ? predictPaycheck(basis, fit, c.no_benefits) : null) : rate.net_per_check_cents,
+          uncertain: hourly && fit !== null && basis > 0 && isOutsideKnown(basis, fit),
+          bills,
+          bills_cents: bills.reduce((t, b) => t + b.cents, 0),
+          next_pay_date: next,
+        },
+      ];
+    });
+  }
+  const takeHome = (v: PaycheckView) => v.actual_net_cents ?? v.predicted_net_cents ?? 0;
+
+  function incomeCategory(schedule: PaySchedule): { id: number; name: string } | null {
+    return (
+      (schedule.incomeCategoryId !== null ? get<{ id: number; name: string }>(db, "select id, name from categories where id = ? and kind = 'income'", schedule.incomeCategoryId) : undefined) ??
+      get<{ id: number; name: string }>(db, "select id, name from categories where kind = 'income' and archived = 0 order by sort, id limit 1") ??
+      null
+    );
+  }
+
+  function getPayMonth(args: { person: Person; month: string }): PayMonth {
+    if (!isPerson(args.person) || !isMonth(args.month)) throw new UserError("That month is not valid");
+    const first = `${args.month}-01`;
+    const last = `${args.month}-${String(daysInMonth(args.month)).padStart(2, "0")}`;
+    const gridStart = addDays(first, -((weekday(first) + 6) % 7));
+    const gridEnd = addDays(last, (7 - weekday(last)) % 7);
+    const year = args.month.slice(0, 4);
+    const profile = getPayProfile({ person: args.person });
+    const bankHolidays = [Number(year) - 1, Number(year), Number(year) + 1].flatMap(usBankHolidays).filter((h) => h.date >= gridStart && h.date <= gridEnd);
+    const days = all<{ date: string; hours: number; tag: DayTag }>(db, "select date, hours, tag from work_days where person = ? and date >= ? and date <= ? order by date", args.person, gridStart, gridEnd);
+    if (!profile) {
+      return {
+        person: args.person, profile, gridStart, gridEnd, days, bankHolidays, paychecks: [], fit: null,
+        income: { category_id: null, category_name: null, expected_cents: 0, planned_cents: 0, checks: 0 },
+        year: { year, checks: [], hours: 0, gross_cents: 0, net_cents: 0, sickUsedHours: 0, hoursToGoal: null, checksLeft: 0 },
+      };
+    }
+    const fit = fitPay(knownPaychecks(profile));
+    // Hourly paychecks show whenever their pay period touches the calendar; fixed ones only in the month they land.
+    const paychecks = paycheckViews(profile, gridStart, gridEnd, true).filter((v) => v.kind === "hourly" || v.pay_date.startsWith(args.month));
+    const inYear = paycheckViews(profile, `${year}-01-01`, `${year}-12-31`, false).filter((v) => v.pay_date.startsWith(year));
+    const landing = inYear.filter((v) => v.pay_date.startsWith(args.month));
+    const category = incomeCategory(profile.schedule);
+    const planned = category ? (getBudget({ month: args.month, view: args.person }).rows.find((r) => r.category_id === category.id)?.planned ?? 0) : 0;
+    const gross = inYear.reduce((t, v) => t + (v.actual_gross_cents ?? v.gross_cents), 0);
+    const goal = profile.schedule.grossGoalCents;
+    return {
+      person: args.person, profile, gridStart, gridEnd, days, bankHolidays, paychecks,
+      fit: fit ? { n: fit.n, error: fit.error, noBenefitsExtra: fit.noBenefitsExtra } : null,
+      income: { category_id: category?.id ?? null, category_name: category?.name ?? null, expected_cents: landing.reduce((t, v) => t + takeHome(v), 0), planned_cents: planned, checks: landing.length },
+      year: {
+        year,
+        checks: inYear.map((v) => ({ pay_date: v.pay_date, gross_cents: v.actual_gross_cents ?? v.gross_cents, net_cents: takeHome(v), actual: v.actual_net_cents !== null })),
+        hours: inYear.reduce((t, v) => t + v.hours, 0),
+        gross_cents: gross,
+        net_cents: inYear.reduce((t, v) => t + takeHome(v), 0),
+        sickUsedHours: get<{ h: number | null }>(db, "select sum(hours) h from work_days where person = ? and tag = 'sick' and date like ?", args.person, `${year}-%`)!.h ?? 0,
+        hoursToGoal: profile.current.kind === "hourly" && goal !== null ? hoursToGoal(goal, gross, profile.current.rate_cents ?? 0) : null,
+        checksLeft: inYear.filter((v) => v.pay_date >= today()).length,
+      },
+    };
+  }
+
+  /** Edits one paycheck. A paycheck is stored only while it differs from what the schedule gives. */
+  function updatePaycheck(args: { person: Person; id: number | null; period_start: string; patch: PaycheckPatch }): void {
+    mutate("Edit paycheck", () => {
+      const profile = profileOf(args.person);
+      const gone = new UserError("That paycheck no longer exists");
+      let before: Check;
+      if (args.id !== null) {
+        const found = storedChecks(args.person).find((c) => c.id === args.id);
+        if (!found) throw gone;
+        before = found;
+      } else {
+        const period = scheduled(args.person, profile.schedule, args.period_start, args.period_start).find((p) => p.period_start === args.period_start);
+        if (!period) throw gone;
+        before = { id: null, ...period, actual_gross_cents: null, actual_net_cents: null, no_benefits: false };
+      }
+      const next: Check = { ...before, ...args.patch };
+      for (const date of [next.period_start, next.period_end, next.pay_date]) if (!isISODate(date)) throw new UserError("Enter a valid date");
+      if (next.period_end < next.period_start) throw new UserError("A pay period cannot end before it starts");
+      for (const amount of [next.actual_gross_cents, next.actual_net_cents]) if (amount !== null && (!Number.isInteger(amount) || amount < 0)) throw new UserError("Enter the amount on the paycheck");
+      if (next.actual_gross_cents !== null && next.actual_net_cents !== null && next.actual_net_cents > next.actual_gross_cents) throw new UserError("Take-home cannot be more than gross");
+      if (get(db, "select id from paychecks where person = ? and id is not ? and period_start <= ? and period_end >= ?", args.person, before.id, next.period_end, next.period_start))
+        throw new UserError("That pay period overlaps another paycheck");
+
+      const asScheduled =
+        next.actual_gross_cents === null && next.actual_net_cents === null && !next.no_benefits &&
+        scheduled(args.person, profile.schedule, next.period_start, next.period_start).some((p) => p.period_start === next.period_start && p.period_end === next.period_end && p.pay_date === next.pay_date);
+      if (before.id !== null) {
+        record("paychecks", { id: before.id });
+        if (asScheduled) run(db, "delete from paychecks where id = ?", before.id);
+        else
+          run(
+            db,
+            "update paychecks set period_start = ?, period_end = ?, pay_date = ?, actual_gross_cents = ?, actual_net_cents = ?, no_benefits = ? where id = ?",
+            next.period_start, next.period_end, next.pay_date, next.actual_gross_cents, next.actual_net_cents, next.no_benefits ? 1 : 0, before.id,
+          );
+      } else if (!asScheduled) {
+        const id = run(
+          db,
+          "insert into paychecks (person, period_start, period_end, pay_date, actual_gross_cents, actual_net_cents, no_benefits) values (?, ?, ?, ?, ?, ?, ?)",
+          args.person, next.period_start, next.period_end, next.pay_date, next.actual_gross_cents, next.actual_net_cents, next.no_benefits ? 1 : 0,
+        ).lastInsertRowid as number;
+        record("paychecks", { id }, true);
+      }
+    });
+  }
+
+  /** What a paycheck would be for a number of hours at today's rate. */
+  function payWhatIf(args: { person: Person; hours: number; no_benefits?: boolean }): { gross_cents: Cents; net_cents: Cents | null; uncertain: boolean; extra_hour_cents: Cents | null } {
+    const profile = profileOf(args.person);
+    if (profile.current.kind !== "hourly") throw new UserError("Hours only change pay for someone paid by the hour");
+    if (!Number.isFinite(args.hours) || args.hours < 0 || args.hours > 400) throw new UserError("Enter a number of hours");
+    const rate = profile.current.rate_cents ?? 0;
+    const gross = grossPay(args.hours, rate);
+    const fit = fitPay(knownPaychecks(profile));
+    const net = (g: Cents) => predictPaycheck(g, fit!, args.no_benefits);
+    return {
+      gross_cents: gross,
+      net_cents: fit ? net(gross) : null,
+      uncertain: fit !== null && gross > 0 && isOutsideKnown(gross, fit),
+      // What one more hour would add to take-home at this point.
+      extra_hour_cents: fit ? net(gross + rate) - net(gross) : null,
+    };
+  }
+
+  /** The next paycheck due on or after today, for the dashboard. */
+  function nextPaycheck(args: { person: Person }): PaycheckView | null {
+    const profile = getPayProfile(args);
+    if (!profile) return null;
+    return paycheckViews(profile, today(), addDays(today(), 62), true).find((v) => v.pay_date >= today()) ?? null;
+  }
+
+  /** Sets the month's planned paycheck income to what the paychecks landing in it are expected to bring home. */
+  function planPayIncome(args: { person: Person; month: string }): Cents {
+    const month = getPayMonth(args);
+    if (!month.profile) throw new UserError("Set up pay first");
+    if (month.income.category_id === null) throw new UserError("Add an income category first");
+    setPlanned({ month: args.month, person: args.person, category_id: month.income.category_id, planned_cents: month.income.expected_cents });
+    return month.income.expected_cents;
+  }
+
+  function importPay(person: Person, pay: PaySetup, categoryIds: Map<string, number>) {
+    if (!Array.isArray(pay.rates) || pay.rates.length === 0) throw new UserError("The setup file's pay needs at least one rate");
+    const before = getPayProfile({ person })?.schedule ?? DEFAULT_SCHEDULE;
+    for (const r of pay.rates) writeRate(person, { effective_date: r.effective_date, kind: r.kind ?? "hourly", rate_cents: r.rate_cents ?? null, net_per_check_cents: r.net_per_check_cents ?? null });
+    let incomeCategoryId = before.incomeCategoryId;
+    if (pay.incomeCategory !== undefined) {
+      const id = categoryIds.get(pay.incomeCategory.toLowerCase());
+      if (id === undefined) throw new UserError(`The setup file pays into "${pay.incomeCategory}", which is not a category`);
+      incomeCategoryId = id;
+    }
+    const schedule: PaySchedule = {
+      rule: pay.rule ?? before.rule,
+      anchor: pay.anchor ?? before.anchor,
+      lagDays: pay.lagDays ?? before.lagDays,
+      monthDays: pay.monthDays ?? before.monthDays,
+      sickHoursPerYear: pay.sickHoursPerYear ?? before.sickHoursPerYear,
+      usualHours: pay.usualHours ?? before.usualHours,
+      grossGoalCents: pay.grossGoalCents === undefined ? before.grossGoalCents : pay.grossGoalCents,
+      incomeCategoryId,
+      history: pay.history ?? before.history,
+    };
+    checkSchedule(schedule);
+    writeSchedule(person, schedule);
+  }
+
   // ---- statement ----------------------------------------------------------
 
   /** One person's month: shared bills and purchases, settlements, the balance, and their budget. */
@@ -829,7 +1236,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
 
   // ---- setup file ---------------------------------------------------------
 
-  /** Loads a setup file: names, split, groups, categories and a first month's plan. */
+  /** Loads a setup file: names, split, groups, categories, a first month's plan and how each person is paid. */
   function importSetup(file: SetupFile): { categories: number; budgetLines: number } {
     return mutate("Import setup file", () => {
       const settings = getSettings();
@@ -886,6 +1293,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
           }
         }
       }
+      for (const person of ["a", "b"] as const) if (file.pay?.[person]) importPay(person, file.pay[person]!, idByName);
       return { categories: created, budgetLines: lines };
     });
   }
@@ -915,6 +1323,16 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     "bills.generate": generateBills,
     "bills.remove": removeBill,
     "statement.data": statementData,
+    "pay.profile": getPayProfile,
+    "pay.saveProfile": savePayProfile,
+    "pay.removeRate": removePayRate,
+    "pay.setHistory": setPayHistory,
+    "pay.setDay": setWorkDay,
+    "pay.month": getPayMonth,
+    "pay.updatePaycheck": updatePaycheck,
+    "pay.whatIf": payWhatIf,
+    "pay.next": nextPaycheck,
+    "pay.planIncome": planPayIncome,
     "budget.get": getBudget,
     "budget.setPlanned": setPlanned,
     "budget.setStartBalance": setStartBalance,

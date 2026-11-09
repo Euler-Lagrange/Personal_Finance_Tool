@@ -65,6 +65,7 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
       <BalanceCard month={month} settings={settings} />
 
       <div className="stack">
+        <NextPaycheck view={view} settings={settings} />
         <BillsDue />
         <Card title="Over plan">
           {over.length === 0 ? (
@@ -106,6 +107,43 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
         )}
       </Card>
     </div>
+  );
+}
+
+/** The next payday for whoever is on screen, once their pay is set up. */
+function NextPaycheck({ view, settings }: Pick<ScreenProps, "view" | "settings">) {
+  const a = useQuery("pay.next", { person: "a" });
+  const b = useQuery("pay.next", { person: "b" });
+  const rows = (view === "hh" ? (["a", "b"] as const) : [view]).flatMap((p) => {
+    const check = p === "a" ? a : b;
+    return check ? [{ p, check }] : [];
+  });
+  if (rows.length === 0) return null;
+  return (
+    <Card title="Next paycheck" action={<a href="#/pay">Pay</a>}>
+      <ul className="plain">
+        {rows.map(({ p, check }) => {
+          const takeHome = check.actual_net_cents ?? check.predicted_net_cents;
+          return (
+            <li key={p} className="next-pay">
+              <div className="row-line">
+                <span>
+                  {view === "hh" ? `${settings.people[p]} · ` : ""}
+                  {new Date(`${check.pay_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                  {check.kind === "hourly" && <span className="muted"> · {Number(check.hours.toFixed(2))} hours so far</span>}
+                </span>
+                <strong className="money">{takeHome === null ? "–" : formatMoney(takeHome)}</strong>
+              </div>
+              {takeHome !== null && check.bills_cents > 0 && (
+                <p className="muted small">
+                  {formatMoney(check.bills_cents)} of bills before the one after, leaving {formatMoney(takeHome - check.bills_cents)}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

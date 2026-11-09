@@ -127,4 +127,131 @@ export interface SetupFile {
   replaceCategories?: boolean;
   categories?: { name: string; group: string; kind?: "expense" | "income"; icon?: string }[];
   budget?: { month: string; a?: Record<string, number>; b?: Record<string, number> };
+  pay?: Partial<Record<Person, PaySetup>>;
+}
+
+/** One person's pay in a setup file. Amounts are whole cents. */
+export interface PaySetup {
+  rates: { effective_date: string; kind?: PayKind; rate_cents?: Cents; net_per_check_cents?: Cents }[];
+  rule?: "biweekly" | "monthdays";
+  anchor?: string;
+  lagDays?: number;
+  monthDays?: number[];
+  sickHoursPerYear?: number;
+  usualHours?: number;
+  grossGoalCents?: Cents | null;
+  incomeCategory?: string;
+  history?: KnownPaycheck[];
+}
+
+// ---- pay ---------------------------------------------------------------------
+
+export type DayTag = "worked" | "sick" | "holiday" | "off";
+export type PayKind = "hourly" | "salaried";
+
+/** A past paycheck whose gross and take-home are both known. */
+export interface KnownPaycheck {
+  gross_cents: Cents;
+  net_cents: Cents;
+  no_benefits?: boolean;
+}
+
+export interface PaySchedule {
+  /** Paid every two weeks, or on set days of the month. */
+  rule: "biweekly" | "monthdays";
+  /** Every two weeks: the Monday that starts any one real pay period. */
+  anchor: string;
+  /** Days from the end of a pay period to payday (5 = the following Friday). */
+  lagDays: number;
+  /** Set days: the paydays, where 31 means the last day of the month. */
+  monthDays: number[];
+  sickHoursPerYear: number;
+  /** Hours a paycheck usually has. A pay period that is not over yet is predicted at this many until more are logged. 0 means no assumption. */
+  usualHours: number;
+  grossGoalCents: Cents | null;
+  /** The income category paychecks are planned under. Null means the first one. */
+  incomeCategoryId: number | null;
+  /** Known past paychecks, used to predict take-home from gross. */
+  history: KnownPaycheck[];
+}
+
+export interface PayRate {
+  id: number;
+  effective_date: string;
+  kind: PayKind;
+  rate_cents: Cents | null;
+  net_per_check_cents: Cents | null;
+}
+
+export interface PayProfile {
+  person: Person;
+  /** The rate in force today. */
+  current: PayRate;
+  rates: PayRate[];
+  schedule: PaySchedule;
+}
+
+export interface PayProfileInput extends Omit<PaySchedule, "history"> {
+  person: Person;
+  kind: PayKind;
+  /** A date that already has a rate corrects it; a new date adds a rate from then on. */
+  effective_date: string;
+  rate_cents: Cents | null;
+  net_per_check_cents: Cents | null;
+}
+
+export interface PaycheckView {
+  /** Null while the paycheck simply follows the schedule and nothing has been typed on it. */
+  id: number | null;
+  period_start: string;
+  period_end: string;
+  pay_date: string;
+  kind: PayKind;
+  /** Hours logged in the pay period, and what they come to at the rate. */
+  hours: number;
+  gross_cents: Cents;
+  /** Set when the pay period is not over and the prediction assumes the usual hours instead of the fewer logged so far. */
+  assumed_hours: number | null;
+  predicted_net_cents: Cents | null;
+  /** The gross is well outside the known paychecks, so the prediction is a guess. */
+  uncertain: boolean;
+  actual_gross_cents: Cents | null;
+  actual_net_cents: Cents | null;
+  no_benefits: boolean;
+  /** This person's share of bills due from this payday up to the next one. Empty unless asked for. */
+  bills: { name: string; date: string; cents: Cents }[];
+  bills_cents: Cents;
+  next_pay_date: string;
+}
+
+export interface PaycheckPatch {
+  period_start?: string;
+  period_end?: string;
+  pay_date?: string;
+  actual_gross_cents?: Cents | null;
+  actual_net_cents?: Cents | null;
+  no_benefits?: boolean;
+}
+
+export interface PayMonth {
+  person: Person;
+  profile: PayProfile | null;
+  gridStart: string;
+  gridEnd: string;
+  days: { date: string; hours: number; tag: DayTag }[];
+  bankHolidays: { date: string; name: string }[];
+  paychecks: PaycheckView[];
+  fit: { n: number; error: number; noBenefitsExtra: Cents | null } | null;
+  /** Take-home landing in this month against what the budget plans for. */
+  income: { category_id: number | null; category_name: string | null; expected_cents: Cents; planned_cents: Cents; checks: number };
+  year: {
+    year: string;
+    checks: { pay_date: string; gross_cents: Cents; net_cents: Cents; actual: boolean }[];
+    hours: number;
+    gross_cents: Cents;
+    net_cents: Cents;
+    sickUsedHours: number;
+    hoursToGoal: number | null;
+    checksLeft: number;
+  };
 }

@@ -194,7 +194,12 @@ function createWindow() {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   openData();
-  if (process.env.FINANCE_DEMO && core["entries.list"]({ month: new Date().toISOString().slice(0, 7) }).length === 0) loadDemo(core);
+  if (process.env.FINANCE_DEMO && core["entries.list"]({ month: new Date().toISOString().slice(0, 7) }).length === 0) {
+    // A few hundred made-up rows in a scratch folder: no need to wait on the disk after each one.
+    db.exec("pragma synchronous = off");
+    loadDemo(core);
+    db.exec("pragma synchronous = full");
+  }
   if (process.env.FINANCE_THEME) saveLocal({ theme: process.env.FINANCE_THEME });
   if (process.env.FINANCE_BACKUP_DIR) saveLocal({ backupFolder: path.resolve(process.env.FINANCE_BACKUP_DIR) });
   const shellApi = createShellApi();

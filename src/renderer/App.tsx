@@ -11,6 +11,7 @@ import { Budget } from "./screens/Budget";
 import { SplitScreen } from "./screens/Split";
 import { SettingsScreen } from "./screens/Settings";
 import { ComingSoon } from "./screens/ComingSoon";
+import { Pay } from "./screens/Pay";
 
 export interface ScreenProps {
   month: string;
@@ -89,7 +90,7 @@ export function App() {
 
   const props: ScreenProps = { month, view, settings, categories };
   const title = route === "settings" ? "Settings" : NAV.find((n) => n.id === route)!.label;
-  const usesMonth = route === "dashboard" || route === "transactions" || route === "budget" || route === "split";
+  const usesMonth = route === "dashboard" || route === "transactions" || route === "budget" || route === "split" || route === "pay";
   const usesView = route === "dashboard" || route === "transactions" || route === "budget";
 
   return (
@@ -159,9 +160,7 @@ export function App() {
           {route === "transactions" && <Transactions {...props} />}
           {route === "budget" && <Budget {...props} />}
           {route === "split" && <SplitScreen {...props} />}
-          {route === "pay" && (
-            <ComingSoon milestone={5} title="Pay calendar" points={["A Monday-to-Sunday calendar for your hours", "Paychecks with predicted and actual take-home", "Hours what-if and the paycheck plan"]} />
-          )}
+          {route === "pay" && <Pay {...props} />}
           {route === "savings" && (
             <ComingSoon milestone={6} title="Savings" points={["Sinking fund balances and targets", "Yearly renewals and the per-paycheck set-aside", "Emergency fund runway"]} />
           )}
