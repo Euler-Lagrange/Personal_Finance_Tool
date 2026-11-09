@@ -87,6 +87,29 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
     const balance = await page<number>(`return (await rpc("balance.get", {})).cents;`);
     check("Settle up clears the balance", balance === 0, balance);
 
+    await page(`location.hash = "#/split"; await sleep(700);
+      const form = document.querySelector("form.add-bill");
+      setValue(form.querySelector('input[placeholder="Electric"]'), "Smoke gym");
+      setValue(form.querySelector('input[placeholder="varies"]'), "40");
+      setValue(form.querySelectorAll("input")[2], "15");
+      form.requestSubmit(); await sleep(600);`);
+    const today = new Date();
+    const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const findBill = `(await rpc("bills.list", { month: "${todayISO.slice(0, 7)}", today: "${todayISO}" })).rows.find((r) => r.name === "Smoke gym")`;
+    let b = await page<{ entry: { date: string; amount_cents: number; a_cents: number; seen_in_bank: boolean } | null } | undefined>(`return ${findBill};`);
+    check("adding a bill creates this month's entry on its due day", !!b?.entry && b.entry.amount_cents === 4000 && b.entry.a_cents === 2400 && b.entry.date.endsWith("-15"), b);
+
+    await page(`const row = rowOf("Smoke gym"); row.querySelector('input[type="checkbox"]').click(); await sleep(400);
+      commit(rowOf("Smoke gym").querySelector('input[aria-label="Smoke gym this month"]'), "45.50"); await sleep(500);`);
+    b = await page(`return ${findBill};`);
+    check("ticking Paid and changing this month's amount are saved", !!b?.entry && b.entry.seen_in_bank && b.entry.amount_cents === 4550, b);
+
+    const pdf = path.join(path.dirname(reportFile), "statement.pdf");
+    await page(`await rpc("statement.write", { month: "${todayISO.slice(0, 7)}", person: "b", file: ${JSON.stringify(pdf)} });`);
+    const bytes = fs.existsSync(pdf) ? fs.readFileSync(pdf) : Buffer.alloc(0);
+    check("the statement is written as a PDF", bytes.subarray(0, 5).toString() === "%PDF-" && bytes.length > 5000, bytes.length);
+    if (process.env.FINANCE_SMOKE_KEEP_PDF) fs.copyFileSync(pdf, process.env.FINANCE_SMOKE_KEEP_PDF);
+
     if (process.env.FINANCE_SMOKE_BACKUP_DIR) {
       const dir = JSON.stringify(process.env.FINANCE_SMOKE_BACKUP_DIR);
       await page(`await rpc("backup.setFolder", { folder: ${dir} }); location.hash = "#/settings"; await sleep(700);`);

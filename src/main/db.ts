@@ -130,7 +130,10 @@ create table pay_profiles (
 );
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1];
+/** v2: remember the last month each bill template created an entry for, so a deleted bill is not recreated. */
+const SCHEMA_V2 = `alter table recurring add column last_generated text;`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2];
 export const MIGRATION_COUNT = MIGRATIONS.length;
 
 export function openDb(path: string): Db {

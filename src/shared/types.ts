@@ -32,6 +32,34 @@ export interface Category {
   archived: boolean;
 }
 
+/** A bill's split: follow the household default, or a split of its own. */
+export type TemplateSplit = SplitSpec | { type: "default" };
+
+/** One recurring bill, with this month's entry if it has been created. */
+export interface BillRow {
+  id: number;
+  name: string;
+  category_id: number | null;
+  category_name: string | null;
+  due_day: number;
+  expected_cents: Cents;
+  paid_by: Person;
+  split: TemplateSplit;
+  active: boolean;
+  entry: { id: number; date: string; amount_cents: Cents; a_cents: Cents; b_cents: Cents; seen_in_bank: boolean } | null;
+  /** The amount of the most recent earlier month, to show when a bill has changed. */
+  previous_cents: Cents | null;
+}
+
+export interface BillInput {
+  name: string;
+  category_id: number | null;
+  due_day: number;
+  amount_cents: Cents;
+  paid_by: Person;
+  split: TemplateSplit;
+}
+
 export interface Entry {
   id: number;
   date: string;
@@ -47,6 +75,8 @@ export interface Entry {
   b_cents: Cents;
   from_fund: boolean;
   split_of: number | null;
+  recurring_id: number | null;
+  seen_in_bank: boolean;
   note: string | null;
 }
 

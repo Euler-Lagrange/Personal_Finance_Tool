@@ -4,9 +4,10 @@ import { balanceDelta } from "../../core/balance";
 import { shortDate } from "../../core/dates";
 import { formatMoney } from "../../core/money";
 import { Card } from "../components/ui";
+import { Bills, StatementCard } from "./Bills";
 import { BalanceCard } from "./Dashboard";
 
-export function SplitScreen({ month, settings }: ScreenProps) {
+export function SplitScreen({ month, settings, categories }: ScreenProps) {
   const entries = useQuery("entries.list", { month });
   if (!entries) return null;
   const moving = entries.filter((e) => balanceDelta(e) !== 0);
@@ -15,18 +16,17 @@ export function SplitScreen({ month, settings }: ScreenProps) {
     <div className="stack">
       <div className="grid stats">
         <BalanceCard month={month} settings={settings} />
-        <Card title="How it adds up" className="span-2">
-          <p className="muted">
-            Every shared purchase puts the other person's share on the balance. A settlement takes it off. The balance carried in from before the app is{" "}
-            {settings.openingBalanceCents === 0
-              ? "zero"
-              : `${formatMoney(Math.abs(settings.openingBalanceCents))} owed by ${settings.openingBalanceCents > 0 ? b : a}`}
-            ; change it in <a href="#/settings">Settings</a>.
-          </p>
-        </Card>
+        <StatementCard month={month} settings={settings} />
       </div>
 
+      <Bills month={month} settings={settings} categories={categories} />
+
       <Card title="This month's shared entries">
+        <p className="muted">
+          Every shared purchase puts the other person's share on the balance, and a settlement takes it off. The balance carried in from before the app is{" "}
+          {settings.openingBalanceCents === 0 ? "zero" : `${formatMoney(Math.abs(settings.openingBalanceCents))} owed by ${settings.openingBalanceCents > 0 ? b : a}`}; change it in{" "}
+          <a href="#/settings">Settings</a>.
+        </p>
         {moving.length === 0 ? (
           <p className="muted">Nothing shared this month yet.</p>
         ) : (
@@ -66,12 +66,6 @@ export function SplitScreen({ month, settings }: ScreenProps) {
         )}
       </Card>
 
-      <Card title="Recurring bills arrive in milestone 4" className="coming">
-        <ul>
-          <li>Bill templates that create each month's entries</li>
-          <li>A split rule per bill, and the statement PDF</li>
-        </ul>
-      </Card>
     </div>
   );
 }

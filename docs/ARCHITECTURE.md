@@ -91,7 +91,7 @@ The balance is one running number: what B owes on entries A paid, minus what A o
 | Bulk edit | Select several rows, set category or split at once | 2 (built) |
 | Split one purchase | Divide one receipt across categories; pieces stay linked | 2 (built) |
 | Subscription flag | Points out a repeating charge not in the bills yet | 3 |
-| Bill change flag | Marks a bill whose amount moved from last month | 4 |
+| Bill change flag | Marks a bill whose amount moved from last month | 4 (built) |
 | Hours what-if | Type hours, see the predicted paycheck | 5 |
 | Export | Any month or year to Excel or CSV | 6 |
 | Emergency fund runway | Months of Needs spending that savings would cover | 6 |
@@ -137,7 +137,7 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 1. **Shell:** window, six screens, themes, data file, backup. *Built.*
 2. **Entries, split and budget:** quick-add, both budgets, balance, dashboard. *Built.*
 3. **Screenshot import**, balance snapshots, missing-entries check.
-4. **Bills & Split:** recurring templates, statement, bills-went-out check.
+4. **Bills & Split:** recurring templates, statement. *Built.* The bills-went-out check follows milestone 3.
 5. **Pay calendar** and predictions, paycheck-landed check.
 6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC.
 

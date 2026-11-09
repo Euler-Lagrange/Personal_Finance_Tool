@@ -3,7 +3,7 @@ import { change, toast, useQuery } from "../api";
 import type { ScreenProps } from "../App";
 import { whoOwes } from "../../core/balance";
 import { summarize } from "../../core/budget";
-import { shortDate, toISO } from "../../core/dates";
+import { addDays, monthOf, shortDate, toISO } from "../../core/dates";
 import { formatMoney } from "../../core/money";
 import { CategoryIcon } from "../components/Icon";
 import { AmountInput, Bar, Card, Money } from "../components/ui";
@@ -64,22 +64,25 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
 
       <BalanceCard month={month} settings={settings} />
 
-      <Card title="Over plan" className="span-1">
-        {over.length === 0 ? (
-          <p className="muted">Every category is within its plan.</p>
-        ) : (
-          <ul className="plain">
-            {over.map((r) => (
-              <li key={r.category_id} className="row-line">
-                <span className="with-icon">
-                  <CategoryIcon name={r.icon} /> {r.name}
-                </span>
-                <span className="money neg">{formatMoney(r.actual - r.planned)} over</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <div className="stack">
+        <BillsDue />
+        <Card title="Over plan">
+          {over.length === 0 ? (
+            <p className="muted">Every category is within its plan.</p>
+          ) : (
+            <ul className="plain">
+              {over.map((r) => (
+                <li key={r.category_id} className="row-line">
+                  <span className="with-icon">
+                    <CategoryIcon name={r.icon} /> {r.name}
+                  </span>
+                  <span className="money neg">{formatMoney(r.actual - r.planned)} over</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
       <Card title="Recent entries" className="span-2" action={<a href="#/transactions">View all</a>}>
         {entries.length === 0 ? (
@@ -103,6 +106,33 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
         )}
       </Card>
     </div>
+  );
+}
+
+/** Bills due in the next seven days that have not been ticked as paid. Always about today, whatever month is on screen. */
+function BillsDue() {
+  const today = toISO(new Date());
+  const bills = useQuery("bills.list", { month: monthOf(today), today });
+  if (!bills) return null;
+  const until = addDays(today, 7);
+  const due = bills.rows.filter((r) => r.active && r.entry && !r.entry.seen_in_bank && r.entry.date >= today && r.entry.date <= until);
+  return (
+    <Card title="Bills due this week" action={<a href="#/split">All bills</a>}>
+      {due.length === 0 ? (
+        <p className="muted">{bills.rows.length === 0 ? "No bills set up yet." : "Nothing due in the next seven days."}</p>
+      ) : (
+        <ul className="plain">
+          {due.map((r) => (
+            <li key={r.id} className="row-line">
+              <span>
+                {r.name} <span className="muted">· {shortDate(r.entry!.date)}</span>
+              </span>
+              <span className="money">{formatMoney(r.entry!.amount_cents)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

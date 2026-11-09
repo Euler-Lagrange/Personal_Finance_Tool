@@ -7,6 +7,9 @@ import { MIGRATION_COUNT, openDb, type Db } from "./db";
 import { loadDemo } from "./demo";
 import { runSmoke, takeShots } from "./devtools";
 import { readLocal, writeLocal } from "./local";
+import { monthLabel } from "../core/dates";
+import type { Person } from "../core/split";
+import { statementHtml } from "../core/statement";
 import type { BackupFile, BackupStatus, LocalConfig, SetupFile } from "../shared/types";
 
 // Tests, screenshots and demos point the app at a scratch folder so they never touch real data.
@@ -62,6 +65,19 @@ function setBackupFolder(folder: string): string {
   return folder;
 }
 
+/** Renders one person's statement for a month and writes it as a PDF. */
+async function writeStatement(month: string, person: Person, file: string): Promise<string> {
+  const html = statementHtml(core["statement.data"]({ month, person }));
+  const page = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+  try {
+    await page.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    fs.writeFileSync(file, await page.webContents.printToPDF({ printBackground: true, pageSize: "Letter" }));
+    return file;
+  } finally {
+    page.destroy();
+  }
+}
+
 function createShellApi() {
   return {
     "local.get": (): LocalConfig => {
@@ -114,6 +130,25 @@ function createShellApi() {
     "backup.openFolder": (): void => {
       const folder = local().backupFolder;
       if (folder) void shell.openPath(folder);
+    },
+
+    "statement.save": async (args: { month: string; person: Person }): Promise<string | null> => {
+      const name = core["settings.get"]().people[args.person];
+      const config = local() as { statementFolder?: string };
+      const fileName = `${name} statement ${monthLabel(args.month)}.pdf`.replace(/[\\/:*?"<>|]/g, "");
+      const result = await dialog.showSaveDialog(win!, {
+        title: "Save the statement",
+        defaultPath: path.join(config.statementFolder ?? app.getPath("documents"), fileName),
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      if (result.canceled || !result.filePath) return null;
+      saveLocal({ statementFolder: path.dirname(result.filePath) });
+      return writeStatement(args.month, args.person, result.filePath);
+    },
+    // Used by the smoke test only: a screen never chooses where a file is written.
+    "statement.write": (args: { month: string; person: Person; file: string }): Promise<string> => {
+      if (!process.env.FINANCE_SMOKE) throw new UserError("Use Save PDF to choose where the statement goes");
+      return writeStatement(args.month, args.person, args.file);
     },
 
     "setup.chooseAndImport": async (): Promise<{ categories: number; budgetLines: number } | null> => {

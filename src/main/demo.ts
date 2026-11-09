@@ -33,18 +33,27 @@ export function loadDemo(api: CoreApi, today: Date = new Date()): void {
       paid_by,
       split: a === undefined ? undefined : { type: "percent", a },
     });
-  add(1, "Mortgage", 160000, "Housing");
+  // Bills started last month, so this month shows them created automatically and one that changed.
+  const lastMonth = addMonths(month, -1);
+  const bill = (name: string, category: string, due_day: number, amount_cents: number, a?: number) =>
+    api["bills.create"]({ name, category_id: cat.get(category)!, due_day, amount_cents, paid_by: "a", split: a === undefined ? { type: "default" } : { type: "percent", a }, month: lastMonth });
+  const mortgage = bill("Mortgage", "Housing", 1, 160000);
+  bill("Fiber internet", "Internet and phone", 3, 7500);
+  const power = bill("City Power", "Utilities", 6, 10990);
+  bill("Car insurance", "Insurance", 8, 14200, 50);
+  bill("Streaming bundle", "Subscriptions", 9, 2299);
+  bill("Water", "Utilities", 21, 0);
+  const rolled = api["bills.list"]({ month, today: toISO(today) });
+  api["bills.setMonthAmount"]({ id: power, month, amount_cents: 11840 });
+  api["entries.setSeen"]({ id: rolled.rows.find((r) => r.id === mortgage)!.entry!.id, seen: true });
+
   add(1, "Paycheck", 212000, "Paycheck", "a", undefined, "income");
   add(2, "Paycheck", 141000, "Paycheck", "b", undefined, "income");
   add(2, "Corner Market", 8431, "Groceries");
-  add(3, "Fiber internet", 7500, "Internet and phone");
   add(4, "Noodle House", 4680, "Dining out", "b");
   add(5, "Board game cafe", 3200, "Hobbies", "a", 100);
-  add(6, "City Power", 11840, "Utilities");
   add(7, "Farm stand", 2650, "Groceries", "b");
   add(8, "Transit pass", 6000, "Transport", "a", 100);
-  add(8, "Car insurance", 14200, "Insurance", "a", 50);
-  add(9, "Streaming bundle", 2299, "Subscriptions");
   add(9, "Birthday present", 4500, "Gifts", "b", 0);
   add(1, "Transfer to savings", 90000, "Savings", "a", 100);
   add(2, "Transfer to savings", 50000, "Savings", "b", 0);

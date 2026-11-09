@@ -1,10 +1,11 @@
 import { all, get, run, tx, type Db, type Row } from "./db";
-import { balance, type BalanceEntry, type EntryKind } from "../core/balance";
-import type { BudgetRow } from "../core/budget";
-import { isISODate, isMonth } from "../core/dates";
+import { balance, balanceDelta, type BalanceEntry, type EntryKind } from "../core/balance";
+import { summarize, type BudgetRow } from "../core/budget";
+import { daysInMonth, isISODate, isMonth, monthOf } from "../core/dates";
+import type { StatementData, StatementLine } from "../core/statement";
 import type { Cents } from "../core/money";
 import { computeShares, isValidSplit, MINE, THEIRS, type Person, type SplitSpec } from "../core/split";
-import type { Category, Entry, EntryInput, EntryPatch, Settings, SetupFile, View } from "../shared/types";
+import type { BillInput, BillRow, Category, Entry, EntryInput, EntryPatch, Settings, SetupFile, TemplateSplit, View } from "../shared/types";
 
 /** A message meant for the person using the app, shown next to the control that caused it. */
 export class UserError extends Error {}
@@ -49,6 +50,7 @@ const KEYS: Record<string, string[]> = {
   budget_lines: ["month", "person", "category_id"],
   months: ["month", "person"],
   settings: ["key"],
+  recurring: ["id"],
 };
 
 interface UndoOp {
@@ -292,6 +294,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     b_cents: r.b_cents as number,
     from_fund: r.from_fund === 1,
     split_of: (r.split_of as number) ?? null,
+    recurring_id: (r.recurring_id as number) ?? null,
+    seen_in_bank: r.seen_in_bank === 1,
     note: (r.note as string) ?? null,
   });
 
@@ -328,14 +332,14 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     return { ...input, description, category_id, split, shares, account: input.account?.trim() || null, note: input.note?.trim() || null };
   }
 
-  function insertEntry(input: EntryInput, extra: { split_of?: number } = {}): number {
+  function insertEntry(input: EntryInput, extra: { split_of?: number; recurring_id?: number } = {}): number {
     const e = prepare(input);
     const stamp = now();
     const id = run(
       db,
-      `insert into entries (date, description, amount_cents, kind, category_id, paid_by, account, split_json, a_cents, b_cents, split_of, note, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      e.date, e.description, e.amount_cents, e.kind, e.category_id, e.paid_by, e.account, JSON.stringify(e.split), e.shares.a, e.shares.b, extra.split_of ?? null, e.note, stamp, stamp,
+      `insert into entries (date, description, amount_cents, kind, category_id, paid_by, account, split_json, a_cents, b_cents, split_of, recurring_id, note, created_at, updated_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      e.date, e.description, e.amount_cents, e.kind, e.category_id, e.paid_by, e.account, JSON.stringify(e.split), e.shares.a, e.shares.b, extra.split_of ?? null, extra.recurring_id ?? null, e.note, stamp, stamp,
     ).lastInsertRowid as number;
     record("entries", { id }, true);
     return id;
@@ -446,7 +450,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
             account: original.account,
             note: original.note,
           },
-          { split_of: original.split_of ?? original.id },
+          { split_of: original.split_of ?? original.id, recurring_id: original.recurring_id ?? undefined },
         ),
       );
       return [entryById(args.id), ...ids.map(entryById)];
@@ -574,6 +578,255 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     return { cents: balance(rows, opening), openingCents: opening, monthDeltaCents: balance(inMonth) };
   }
 
+  // ---- recurring bills ----------------------------------------------------
+
+  const resolveSplit = (split: TemplateSplit): SplitSpec => (split.type === "default" ? getSettings().defaultSplit : split);
+  const dueDate = (month: string, dueDay: number) => `${month}-${String(Math.min(Math.max(dueDay, 1), daysInMonth(month))).padStart(2, "0")}`;
+  const billEntry = (id: number, month: string) =>
+    get<Row>(db, "select * from entries where recurring_id = ? and split_of is null and date like ? order by id limit 1", id, `${month}-%`);
+  const templateOf = (id: number): Row => {
+    const row = readRow("recurring", { id });
+    if (!row) throw new UserError("That bill no longer exists");
+    return row;
+  };
+
+  function checkBill(input: BillInput): BillInput {
+    const name = (input.name ?? "").trim();
+    if (!name) throw new UserError("Enter a name for the bill");
+    if (!Number.isInteger(input.due_day) || input.due_day < 1 || input.due_day > 31) throw new UserError("Enter a due day from 1 to 31");
+    if (!Number.isInteger(input.amount_cents) || input.amount_cents < 0) throw new UserError("Enter the usual amount, or 0 if it varies");
+    if (!isPerson(input.paid_by)) throw new UserError("Choose who pays the bill");
+    if (input.split.type !== "default" && !isValidSplit(input.split)) throw new UserError("That split is not valid");
+    if (input.category_id !== null) {
+      const cat = get<{ kind: string }>(db, "select kind from categories where id = ?", input.category_id);
+      if (!cat || cat.kind !== "expense") throw new UserError("Choose an expense category");
+    }
+    if (input.split.type === "fixed" && input.amount_cents > 0) {
+      try {
+        computeShares(input.amount_cents, input.split);
+      } catch (error) {
+        throw new UserError((error as Error).message);
+      }
+    }
+    return { ...input, name };
+  }
+
+  const toBillInput = (t: Row): BillInput => ({
+    name: t.name as string,
+    category_id: (t.category_id as number) ?? null,
+    due_day: (t.due_day as number) ?? 1,
+    amount_cents: t.amount_cents as number,
+    paid_by: t.paid_by as Person,
+    split: JSON.parse(t.split_json as string) as TemplateSplit,
+  });
+
+  /** Creates the month's entry for one bill. A bill with no usual amount waits for one to be typed. */
+  function createBillEntry(t: Row, month: string, amount = t.amount_cents as number): number | null {
+    if (amount === 0) return null;
+    const bill = toBillInput(t);
+    return insertEntry(
+      { date: dueDate(month, bill.due_day), description: bill.name, amount_cents: amount, kind: "expense", category_id: bill.category_id, paid_by: bill.paid_by, split: resolveSplit(bill.split), account: (t.account as string) ?? null },
+      { recurring_id: t.id as number },
+    );
+  }
+
+  const markGenerated = (id: number, month: string) =>
+    run(db, "update recurring set last_generated = ? where id = ? and (last_generated is null or last_generated < ?)", month, id, month);
+
+  /**
+   * Moving into a new month creates that month's bills once. A bill deleted on purpose is not
+   * recreated, because each template remembers the last month it produced.
+   */
+  function rollBillsForward(month: string) {
+    const due = all<Row>(db, "select * from recurring where active = 1 and cadence = 'monthly' and (last_generated is null or last_generated < ?)", month);
+    if (due.length === 0) return;
+    tx(db, () => {
+      for (const t of due) {
+        if (!billEntry(t.id as number, month)) createBillEntry(t, month);
+        markGenerated(t.id as number, month);
+      }
+      bumpRev();
+    });
+  }
+
+  function listBills(args: { month: string; today: string }): { rows: BillRow[]; missing: number } {
+    if (!isMonth(args.month) || !isISODate(args.today)) throw new UserError("That month is not valid");
+    if (args.month === monthOf(args.today)) rollBillsForward(args.month);
+    const rows = all<Row>(
+      db,
+      `select r.*, c.name as category_name from recurring r left join categories c on c.id = r.category_id
+       where r.cadence = 'monthly' order by r.active desc, r.due_day, r.id`,
+    ).map((t): BillRow => {
+      const e = billEntry(t.id as number, args.month);
+      const pieces = e ? get<{ amount: number; a: number; b: number }>(db, "select sum(amount_cents) amount, sum(a_cents) a, sum(b_cents) b from entries where id = ? or split_of = ?", e.id, e.id)! : null;
+      const previous = get<{ total: number | null }>(
+        db,
+        `select sum(amount_cents) total from entries where recurring_id = ? and substr(date, 1, 7) =
+           (select max(substr(date, 1, 7)) from entries where recurring_id = ? and date < ?)`,
+        t.id, t.id, `${args.month}-01`,
+      );
+      return {
+        id: t.id as number,
+        name: t.name as string,
+        category_id: (t.category_id as number) ?? null,
+        category_name: (t.category_name as string) ?? null,
+        due_day: (t.due_day as number) ?? 1,
+        expected_cents: t.amount_cents as number,
+        paid_by: t.paid_by as Person,
+        split: JSON.parse(t.split_json as string) as TemplateSplit,
+        active: t.active === 1,
+        entry: e && pieces ? { id: e.id as number, date: e.date as string, amount_cents: pieces.amount, a_cents: pieces.a, b_cents: pieces.b, seen_in_bank: e.seen_in_bank === 1 } : null,
+        previous_cents: previous?.total ?? null,
+      };
+    });
+    return { rows, missing: rows.filter((r) => r.active && r.expected_cents > 0 && !r.entry).length };
+  }
+
+  function createBill(input: BillInput & { month: string }): number {
+    return mutate("Add bill", () => {
+      if (!isMonth(input.month)) throw new UserError("That month is not valid");
+      const bill = checkBill(input);
+      const id = run(
+        db,
+        "insert into recurring (name, category_id, cadence, due_day, amount_cents, paid_by, split_json, active, last_generated) values (?, ?, 'monthly', ?, ?, ?, ?, 1, ?)",
+        bill.name, bill.category_id, bill.due_day, bill.amount_cents, bill.paid_by, JSON.stringify(bill.split), input.month,
+      ).lastInsertRowid as number;
+      record("recurring", { id }, true);
+      createBillEntry(templateOf(id), input.month);
+      return id;
+    });
+  }
+
+  /** Changes a bill. When `month` is given, that month's entry follows the change (all but the amount). */
+  function updateBill(args: { id: number; patch: Partial<BillInput> & { active?: boolean }; month?: string }): void {
+    mutate("Edit bill", () => {
+      const before = templateOf(args.id);
+      const bill = checkBill({ ...toBillInput(before), ...args.patch });
+      record("recurring", { id: args.id });
+      run(
+        db,
+        "update recurring set name = ?, category_id = ?, due_day = ?, amount_cents = ?, paid_by = ?, split_json = ?, active = ? where id = ?",
+        bill.name, bill.category_id, bill.due_day, bill.amount_cents, bill.paid_by, JSON.stringify(bill.split),
+        args.patch.active === undefined ? before.active : args.patch.active ? 1 : 0, args.id,
+      );
+      const entry = args.month ? billEntry(args.id, args.month) : undefined;
+      if (entry && args.month) {
+        const p = args.patch;
+        const patch: EntryPatch = {};
+        if (p.name !== undefined) patch.description = bill.name;
+        if (p.category_id !== undefined) patch.category_id = bill.category_id;
+        if (p.paid_by !== undefined) patch.paid_by = bill.paid_by;
+        if (p.split !== undefined) patch.split = resolveSplit(bill.split);
+        if (p.due_day !== undefined) patch.date = dueDate(args.month, bill.due_day);
+        if (Object.keys(patch).length > 0) applyPatch(entry.id as number, patch);
+      }
+    });
+  }
+
+  /** Sets what a bill came to in one month. Zero means there was no bill that month. */
+  function setBillMonthAmount(args: { id: number; month: string; amount_cents: Cents }): void {
+    mutate("Change bill amount", () => {
+      if (!isMonth(args.month)) throw new UserError("That month is not valid");
+      if (!Number.isInteger(args.amount_cents) || args.amount_cents < 0) throw new UserError("Enter the amount of the bill");
+      const t = templateOf(args.id);
+      const entry = billEntry(args.id, args.month);
+      if (!entry) {
+        createBillEntry(t, args.month, args.amount_cents);
+      } else if (args.amount_cents === 0) {
+        if (get<{ n: number }>(db, "select count(*) n from entries where split_of = ?", entry.id)!.n > 0) throw new UserError("This bill was split across categories. Change it on the Transactions screen.");
+        record("entries", { id: entry.id });
+        run(db, "delete from entries where id = ?", entry.id);
+      } else {
+        const pieces = get<{ total: number }>(db, "select coalesce(sum(amount_cents), 0) total from entries where split_of = ?", entry.id)!.total;
+        if (args.amount_cents <= pieces) throw new UserError("This bill was split across categories. Change it on the Transactions screen.");
+        applyPatch(entry.id as number, { amount_cents: args.amount_cents - pieces });
+      }
+      record("recurring", { id: args.id });
+      markGenerated(args.id, args.month);
+    });
+  }
+
+  /** Creates the month's entry for every active bill that does not have one. */
+  function generateBills(args: { month: string }): number {
+    return mutate("Create bills", () => {
+      if (!isMonth(args.month)) throw new UserError("That month is not valid");
+      let made = 0;
+      for (const t of all<Row>(db, "select * from recurring where active = 1 and cadence = 'monthly'")) {
+        if (billEntry(t.id as number, args.month)) continue;
+        record("recurring", { id: t.id });
+        if (createBillEntry(t, args.month) !== null) made++;
+        markGenerated(t.id as number, args.month);
+      }
+      return made;
+    });
+  }
+
+  /** Deletes a bill template. The entries it created stay as ordinary entries. */
+  function removeBill(args: { id: number }): void {
+    mutate("Delete bill", () => {
+      templateOf(args.id);
+      for (const e of all<Row>(db, "select id from entries where recurring_id = ?", args.id)) {
+        record("entries", { id: e.id });
+        run(db, "update entries set recurring_id = null where id = ?", e.id);
+      }
+      record("recurring", { id: args.id });
+      run(db, "delete from recurring where id = ?", args.id);
+    });
+  }
+
+  function setSeen(args: { id: number; seen: boolean }): void {
+    mutate(args.seen ? "Mark as paid" : "Mark as not paid", () => {
+      entryById(args.id);
+      record("entries", { id: args.id });
+      run(db, "update entries set seen_in_bank = ? where id = ?", args.seen ? 1 : 0, args.id);
+    });
+  }
+
+  // ---- statement ----------------------------------------------------------
+
+  /** One person's month: shared bills and purchases, settlements, the balance, and their budget. */
+  function statementData(args: { month: string; person: Person }): StatementData {
+    if (!isMonth(args.month) || !isPerson(args.person)) throw new UserError("That statement is not valid");
+    const settings = getSettings();
+    const rows = all<BalanceEntry & { date: string; description: string; recurring_id: number | null }>(
+      db,
+      "select date, description, kind, paid_by, amount_cents, a_cents, b_cents, recurring_id from entries where kind in ('expense', 'settlement') order by date, id",
+    );
+    const start = `${args.month}-01`;
+    const inMonth = rows.filter((r) => r.date.startsWith(args.month));
+    const shared = inMonth.filter((r) => r.kind === "expense" && balanceDelta(r) !== 0);
+    const line = (r: (typeof rows)[number]): StatementLine => ({
+      date: r.date,
+      description: r.description,
+      total: r.amount_cents,
+      share: args.person === "a" ? r.a_cents : r.b_cents,
+      paid_by: r.paid_by,
+    });
+    const budget = summarize(getBudget({ month: args.month, view: args.person }).rows, settings.groups);
+    return {
+      month: args.month,
+      person: args.person,
+      names: settings.people,
+      openingBalance: balance(rows.filter((r) => r.date < start), settings.openingBalanceCents),
+      closingBalance: balance(rows.filter((r) => r.date.slice(0, 7) <= args.month), settings.openingBalanceCents),
+      bills: shared.filter((r) => r.recurring_id !== null).map(line),
+      purchases: shared.filter((r) => r.recurring_id === null).map(line),
+      settlements: inMonth.filter((r) => r.kind === "settlement").map((r) => ({ date: r.date, from: r.paid_by, amount: r.amount_cents })),
+      budget: {
+        groups: budget.groups
+          .map((g) => ({
+            grp: g.grp,
+            planned: g.planned,
+            actual: g.actual,
+            rows: g.rows.filter((r) => r.planned !== 0 || r.actual !== 0).map((r) => ({ name: r.name, planned: r.planned, actual: r.actual })),
+          }))
+          .filter((g) => g.rows.length > 0),
+        income: { planned: budget.income.planned, actual: budget.income.actual },
+        expenses: budget.expenses,
+      },
+    };
+  }
+
   // ---- setup file ---------------------------------------------------------
 
   /** Loads a setup file: names, split, groups, categories and a first month's plan. */
@@ -591,8 +844,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
       saveSettings(next);
 
       if (file.replaceCategories) {
-        const used = get<{ n: number }>(db, "select count(*) n from entries")!.n;
-        if (used > 0) throw new UserError("Categories can only be replaced before any entries exist");
+        const used = get<{ n: number }>(db, "select count(*) n from entries")!.n + get<{ n: number }>(db, "select count(*) n from recurring")!.n;
+        if (used > 0) throw new UserError("Categories can only be replaced before any entries or bills exist");
         for (const line of all<Row>(db, "select month, person, category_id from budget_lines")) record("budget_lines", line);
         run(db, "delete from budget_lines");
         for (const c of all<Row>(db, "select id from categories")) record("categories", { id: c.id });
@@ -654,6 +907,14 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     "entries.bulkUpdate": bulkUpdateEntries,
     "entries.remove": removeEntries,
     "entries.split": splitEntry,
+    "entries.setSeen": setSeen,
+    "bills.list": listBills,
+    "bills.create": createBill,
+    "bills.update": updateBill,
+    "bills.setMonthAmount": setBillMonthAmount,
+    "bills.generate": generateBills,
+    "bills.remove": removeBill,
+    "statement.data": statementData,
     "budget.get": getBudget,
     "budget.setPlanned": setPlanned,
     "budget.setStartBalance": setStartBalance,

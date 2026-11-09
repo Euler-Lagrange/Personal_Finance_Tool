@@ -84,8 +84,18 @@ export function splitLabel(spec: SplitSpec, settings: Settings): string {
   return describeSplit(spec, settings.people);
 }
 
-/** Pick a split preset, or type a custom percentage for person A. */
-export function SplitSelect(props: { value: SplitSpec | null; onChange: (spec: SplitSpec) => void; settings: Settings; ariaLabel: string; className?: string }) {
+/**
+ * Pick a split preset, or choose Custom and type either a percentage ("62.5") or a fixed
+ * dollar amount ("$110.42") for person A. `leading` adds a first choice such as a bill's "Default".
+ */
+export function SplitSelect(props: {
+  value: SplitSpec | null;
+  onChange: (spec: SplitSpec) => void;
+  settings: Settings;
+  ariaLabel: string;
+  className?: string;
+  leading?: { label: string; active: boolean; onPick: () => void };
+}) {
   const [custom, setCustom] = useState(false);
   const options: SplitSpec[] = [];
   for (const spec of [...props.settings.presets.map((p) => p.spec), ...(props.value ? [props.value] : [])]) {
@@ -93,20 +103,23 @@ export function SplitSelect(props: { value: SplitSpec | null; onChange: (spec: S
   }
   if (custom) {
     const done = (raw: string) => {
-      const pct = Number(raw);
-      if (raw.trim() !== "" && Number.isFinite(pct) && pct >= 0 && pct <= 100) props.onChange({ type: "percent", a: pct });
+      const text = raw.trim();
+      if (text.startsWith("$")) {
+        const cents = parseMoney(text);
+        if (cents !== null && cents >= 0) props.onChange({ type: "fixed", a_cents: cents });
+      } else if (text !== "") {
+        const pct = Number(text.replace(/%$/, ""));
+        if (Number.isFinite(pct) && pct >= 0 && pct <= 100) props.onChange({ type: "percent", a: pct });
+      }
       setCustom(false);
     };
     return (
       <input
         className={`cell ${props.className ?? ""}`}
         autoFocus
-        type="number"
-        min={0}
-        max={100}
-        step="any"
-        aria-label={`Percent for ${props.settings.people.a}`}
-        placeholder={`% for ${props.settings.people.a}`}
+        aria-label={`Share for ${props.settings.people.a}: a percentage, or a dollar amount starting with $`}
+        title={`Type a percentage such as 62.5, or a fixed amount such as $110.42, for ${props.settings.people.a}`}
+        placeholder={`% or $ for ${props.settings.people.a}`}
         onBlur={(e) => done(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
@@ -116,14 +129,21 @@ export function SplitSelect(props: { value: SplitSpec | null; onChange: (spec: S
     );
   }
   const index = props.value ? options.findIndex((o) => sameSplit(o, props.value!)) : -1;
+  const selected = props.leading?.active ? "leading" : index === -1 ? "" : String(index);
   return (
     <select
       className={`cell ${props.className ?? ""}`}
       aria-label={props.ariaLabel}
-      value={index === -1 ? "" : String(index)}
-      onChange={(e) => (e.target.value === "custom" ? setCustom(true) : e.target.value !== "" && props.onChange(options[Number(e.target.value)]))}
+      value={selected}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === "custom") setCustom(true);
+        else if (v === "leading") props.leading?.onPick();
+        else if (v !== "") props.onChange(options[Number(v)]);
+      }}
     >
-      {index === -1 && <option value="">Leave as is</option>}
+      {selected === "" && <option value="">Leave as is</option>}
+      {props.leading && <option value="leading">{props.leading.label}</option>}
       {options.map((o, i) => (
         <option key={i} value={i}>
           {splitLabel(o, props.settings)}

@@ -184,3 +184,22 @@ select.cell.boxed, .quickadd select, .bulkbar select.cell { appearance: auto; }
 .table.edit select.cell.cat { min-width: 140px; }
 .table.edit .cell.date { width: 126px; min-width: 126px; padding-right: 2px; }
 .table.edit .cell.amount { min-width: 84px; }
+
+/* bills */
+.scroll-x { overflow-x: auto; }
+.table.bills td.wide { min-width: 150px; }
+.table.bills .cell.day { width: 52px; text-align: center; }
+.table.bills th.check { width: 44px; }
+.tag.up { background: var(--warning-bg); color: var(--warning); }
+.tag.down { background: var(--accent-soft); color: var(--accent-text); }
+.notice { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: var(--warning-bg); color: var(--warning); margin-bottom: 10px; }
+.quickadd.add-bill { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.quickadd label.tiny input { width: 64px; text-align: center; }
+.quickadd.add-bill .cell { height: 36px; border-color: var(--input-border) !important; background: var(--surface) !important; appearance: auto; }
+.table.bills td.wide { min-width: 120px; }
+.table.bills select.cell { min-width: 78px; }
+.table.bills select.cell.cat { min-width: 124px; }
+.table.bills .cell.amount { width: 86px; min-width: 0; }
+.table.bills th { padding: 9px 6px; }
+.month-cell { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.month-cell .tag { margin: 0; }

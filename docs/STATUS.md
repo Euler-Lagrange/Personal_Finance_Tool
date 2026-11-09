@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-11-09. Milestones 1 and 2 are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet.
+Last updated 2026-11-09. Milestones 1, 2 and 4 are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet. Milestone 3 waits for sample screenshots.
 
 ## Built
 
@@ -22,18 +22,28 @@ Last updated 2026-11-09. Milestones 1 and 2 are built and checked on Linux and o
 - Dashboard: left to spend, income, net, groups, balance, over-plan list, recent entries.
 - Approved extras: Undo (button and Ctrl+Z, last 50 changes), bulk edit, split one purchase across categories.
 
+**Milestone 4: bills and the statement**
+
+- Bill templates on the Bills & Split screen: name, due day, category, payer, split and usual amount, all editable in place. A bill can be switched off or deleted; deleting keeps its past entries.
+- Each bill creates its entry when a new month starts, on its due day. A bill with no usual amount waits until this month's amount is typed. A bill deleted from a month on purpose is not recreated.
+- A split per bill: the household default, a preset, a custom percentage, or a fixed dollar amount. In any split menu, Custom accepts "62.5" or "$110.42".
+- A Paid tick per bill, and bills due in the next seven days on the dashboard.
+- Approved extra: the bill change flag shows how far this month's amount moved from last time.
+- Statement PDF for either person: shared bills, other shared purchases, settlements, the balance at the start and end of the month, and their budget.
+
 ## Checked, and how
 
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Clean |
-| `npm test` (38 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals |
-| `npm run smoke` (12 steps in the real window, Linux) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, backup folder, Restore, refused folder; the stored data is checked after each step |
+| `npm test` (50 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals, bill creation and month roll-over, every kind of bill split, the change flag, switching off and deleting bills, and the statement's figures and wording |
+| `npm run smoke` (15 steps in the real window) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, adds a bill, ticks Paid and changes its amount, writes the statement PDF, backup folder, Restore, refused folder; the stored data is checked after each step |
 | `npm run shots` | Every screen reviewed in Slate and Marshmallow |
+| Statement PDF | Opened and read: two pages, totals add up, the balance sentence matches the app |
 | Backup on close | Confirmed: file written, integrity check ok, all rows present |
 | `npm run dev` | Starts and renders |
 | GitHub Actions, Linux | Type check, unit tests and smoke test pass |
-| GitHub Actions, Windows | Unit tests and the 12-step smoke test pass in the real window on Windows; installer and portable .exe built and uploaded as the `household-finance-windows` artifact |
+| GitHub Actions, Windows | Unit tests and the smoke test pass in the real window on Windows; installer and portable .exe built and uploaded as the `household-finance-windows` artifact |
 
 **Defects found by these checks and fixed**
 
@@ -43,19 +53,23 @@ Last updated 2026-11-09. Milestones 1 and 2 are built and checked on Linux and o
 4. A backup folder that no longer exists could hang the app. It is now refused with a message, and the previous folder is kept; test added.
 5. Splitting a fixed-amount purchase would have changed who owes what. It is now refused with a message; test added.
 6. Restoring an archived category could create two categories with one name. Now refused; test added.
+7. The bills table ran off the side of the window and the change flag overlapped a share. Layout tightened.
+8. The statement's "Your budget" heading was stranded at the foot of page one. Headings now stay with their table.
+9. Replacing categories from a setup file after a bill existed failed with an unclear message. Now refused with a plain one; test added.
 
 ## Not checked yet
 
 - **The owner's PC.** The Windows checks above ran on GitHub's machines. The app has not been launched by hand on a real Windows PC, so display scaling, fonts and the theme look are unconfirmed there.
-- **Native dialogs.** The folder chooser and setup-file picker are not driven by the smoke test. The logic behind them is.
+- **Native dialogs.** The folder chooser, setup-file picker and the statement's Save dialog are not driven by the smoke test. The logic behind them is.
 - **OneDrive.** That backup copies sync to a second PC.
 - **The installer.** Install, upgrade and uninstall.
 
-## Small gaps against the design for milestones 1 and 2
+## Small gaps against the design so far
 
 - Transaction columns can be shown and hidden but not reordered.
-- A fixed-dollar split can be stored and calculated but not typed in the app yet. It arrives with bill templates in milestone 4.
 - The merged-finances switch is not built. Entries already store both shares, so it needs no data change.
+- The Paid tick is manual. Ticking it automatically from a checking screenshot ("bills went out") arrives with milestone 3.
+- Bill templates are monthly. Yearly renewals use the same table and arrive with milestone 6.
 
 ## Next: milestone 3, screenshot import
 
