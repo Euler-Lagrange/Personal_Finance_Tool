@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-electron/
+release/
+shots/
+*.db
+*.db-journal
+*.local.json
+setup.personal.json
+.DS_Store

@@ -1,0 +1,30 @@
+{
+  "people": { "a": "Alex", "b": "Sam" },
+  "defaultSplitA": 60,
+  "presets": [
+    { "label": "60/40", "a": 60 },
+    { "label": "50/50", "a": 50 },
+    { "label": "Alex", "a": 100 },
+    { "label": "Sam", "a": 0 }
+  ],
+  "groups": ["Needs", "Wants", "Savings"],
+  "targets": {
+    "a": { "Needs": 50, "Wants": 20, "Savings": 30 },
+    "b": { "Needs": 55, "Wants": 20, "Savings": 25 }
+  },
+  "openingBalanceCents": 0,
+  "replaceCategories": true,
+  "categories": [
+    { "name": "Mortgage", "group": "Needs", "icon": "home" },
+    { "name": "Electric", "group": "Needs", "icon": "zap" },
+    { "name": "Groceries", "group": "Needs", "icon": "shopping-basket" },
+    { "name": "Dining out", "group": "Wants", "icon": "utensils" },
+    { "name": "Savings", "group": "Savings", "icon": "piggy-bank" },
+    { "name": "Paycheck", "group": "Income", "kind": "income", "icon": "banknote" }
+  ],
+  "budget": {
+    "month": "2026-12",
+    "a": { "Mortgage": 96000, "Electric": 9000, "Groceries": 42000, "Dining out": 18000, "Savings": 90000, "Paycheck": 420000 },
+    "b": { "Mortgage": 64000, "Electric": 6000, "Groceries": 28000, "Dining out": 12000, "Savings": 50000, "Paycheck": 280000 }
+  }
+}

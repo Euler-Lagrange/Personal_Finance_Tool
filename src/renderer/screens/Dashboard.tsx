@@ -1,0 +1,160 @@
+import { useState } from "react";
+import { change, toast, useQuery } from "../api";
+import type { ScreenProps } from "../App";
+import { whoOwes } from "../../core/balance";
+import { summarize } from "../../core/budget";
+import { shortDate, toISO } from "../../core/dates";
+import { formatMoney } from "../../core/money";
+import { CategoryIcon } from "../components/Icon";
+import { AmountInput, Bar, Card, Money } from "../components/ui";
+import type { Settings } from "../../shared/types";
+
+export function Dashboard({ month, view, settings }: ScreenProps) {
+  const budget = useQuery("budget.get", { month, view });
+  const entries = useQuery("entries.list", { month });
+  if (!budget || !entries) return null;
+  const s = summarize(budget.rows, settings.groups);
+  const who = view === "hh" ? "Household" : settings.people[view];
+  const over = s.groups.flatMap((g) => g.rows).filter((r) => r.actual > r.planned && r.planned > 0);
+  const share = (e: (typeof entries)[number]) => (view === "hh" ? e.amount_cents : view === "a" ? e.a_cents : e.b_cents);
+
+  return (
+    <div className="grid dash">
+      <section className="hero">
+        <p className="eyebrow">{who} · left to spend</p>
+        <p className="hero-number">{formatMoney(s.leftToSpend)}</p>
+        <Bar used={s.expenses.actual} total={s.expenses.planned} />
+        <p className="hero-sub">
+          {formatMoney(s.expenses.actual)} used of {formatMoney(s.expenses.planned)} planned
+        </p>
+      </section>
+
+      <Card title="Income">
+        <p className="stat">{formatMoney(s.income.actual)}</p>
+        <p className="muted">of {formatMoney(s.income.planned)} planned</p>
+      </Card>
+
+      <Card title="Net so far">
+        <p className="stat">
+          <Money cents={s.net} tone />
+        </p>
+        <p className="muted">Income received minus money spent or set aside</p>
+      </Card>
+
+      <Card title="Needs, wants and savings" className="span-2">
+        {s.groups.map((g) => {
+          const target = view === "hh" ? undefined : settings.targets[view]?.[g.grp];
+          return (
+            <div className="group-line" key={g.grp}>
+              <div className="group-line-head">
+                <strong>{g.grp}</strong>
+                <span className="muted">
+                  {g.plannedShare !== null ? `${g.plannedShare}% of planned income` : "No planned income yet"}
+                  {target !== undefined ? ` · target ${target}%` : ""}
+                </span>
+                <span className="group-line-amount">
+                  {formatMoney(g.actual)} / {formatMoney(g.planned)}
+                </span>
+              </div>
+              <Bar used={g.actual} total={g.planned} />
+            </div>
+          );
+        })}
+      </Card>
+
+      <BalanceCard month={month} settings={settings} />
+
+      <Card title="Over plan" className="span-1">
+        {over.length === 0 ? (
+          <p className="muted">Every category is within its plan.</p>
+        ) : (
+          <ul className="plain">
+            {over.map((r) => (
+              <li key={r.category_id} className="row-line">
+                <span className="with-icon">
+                  <CategoryIcon name={r.icon} /> {r.name}
+                </span>
+                <span className="money neg">{formatMoney(r.actual - r.planned)} over</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card title="Recent entries" className="span-2" action={<a href="#/transactions">View all</a>}>
+        {entries.length === 0 ? (
+          <p className="muted">
+            No entries this month. <a href="#/transactions">Add the first one</a>.
+          </p>
+        ) : (
+          <table className="table compact">
+            <tbody>
+              {entries.slice(0, 8).map((e) => (
+                <tr key={e.id}>
+                  <td className="nowrap muted">{shortDate(e.date)}</td>
+                  <td>{e.description}</td>
+                  <td className="muted">{e.kind === "settlement" ? "Settlement" : (e.category_name ?? "Uncategorized")}</td>
+                  <td className="num">{formatMoney(e.amount_cents)}</td>
+                  <td className="num muted">{e.kind === "settlement" ? "" : formatMoney(share(e))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/** The running balance between the two people, with a one-step settle up. */
+export function BalanceCard({ month, settings }: { month: string; settings: Settings }) {
+  const bal = useQuery("balance.get", { month });
+  const [settling, setSettling] = useState(false);
+  const [amount, setAmount] = useState<number | null>(null);
+  if (!bal) return null;
+  const owes = whoOwes(bal.cents);
+  const settle = async (cents: number) => {
+    if (!owes) return;
+    const done = await change("entries.create", { date: toISO(new Date()), description: "Settle up", amount_cents: cents, kind: "settlement", category_id: null, paid_by: owes.from });
+    if (done) {
+      setSettling(false);
+      setAmount(null);
+      toast(`Recorded ${formatMoney(cents)} from ${settings.people[owes.from]}`);
+    }
+  };
+  return (
+    <Card title="Balance" className="span-1">
+      {owes ? (
+        <>
+          <p className="muted">
+            {settings.people[owes.from]} owes {settings.people[owes.to]}
+          </p>
+          <p className="stat">{formatMoney(owes.amount)}</p>
+        </>
+      ) : (
+        <p className="stat">All square</p>
+      )}
+      <p className="muted">
+        {bal.monthDeltaCents === 0
+          ? "No change this month"
+          : `This month added ${formatMoney(Math.abs(bal.monthDeltaCents))} to what ${settings.people[bal.monthDeltaCents > 0 ? "b" : "a"]} owes`}
+      </p>
+      {owes &&
+        (settling ? (
+          <div className="inline-form">
+            <AmountInput cents={amount ?? owes.amount} ariaLabel="Amount to settle" onCommit={setAmount} />
+            <button type="button" className="btn" onClick={() => void settle(amount ?? owes.amount)}>
+              Record
+            </button>
+            <button type="button" className="btn ghost" onClick={() => setSettling(false)}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="btn" onClick={() => setSettling(true)}>
+            Settle up
+          </button>
+        ))}
+    </Card>
+  );
+}

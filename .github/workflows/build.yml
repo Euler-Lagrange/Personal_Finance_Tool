@@ -1,0 +1,52 @@
+name: Check and build
+
+on:
+  push:
+    branches: [simple-rebuild]
+  pull_request:
+    branches: [simple-rebuild]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Drive the real window (smoke test)
+        run: npm run smoke
+
+  windows:
+    name: Windows app
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Drive the real window (smoke test)
+        run: npm run smoke
+      - name: Build installer and portable app
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: household-finance-windows
+          path: |
+            release/*.exe
+          if-no-files-found: error
+          retention-days: 30
