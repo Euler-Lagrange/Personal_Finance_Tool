@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-11-09. Milestones 1 and 2 are built and checked on Linux. Nothing has been run by hand on Windows yet.
+Last updated 2026-11-09. Milestones 1 and 2 are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet.
 
 ## Built
 
@@ -32,6 +32,8 @@ Last updated 2026-11-09. Milestones 1 and 2 are built and checked on Linux. Noth
 | `npm run shots` | Every screen reviewed in Slate and Marshmallow |
 | Backup on close | Confirmed: file written, integrity check ok, all rows present |
 | `npm run dev` | Starts and renders |
+| GitHub Actions, Linux | Type check, unit tests and smoke test pass |
+| GitHub Actions, Windows | Unit tests and the 12-step smoke test pass in the real window on Windows; installer and portable .exe built and uploaded as the `household-finance-windows` artifact |
 
 **Defects found by these checks and fixed**
 
@@ -44,7 +46,7 @@ Last updated 2026-11-09. Milestones 1 and 2 are built and checked on Linux. Noth
 
 ## Not checked yet
 
-- **Windows.** GitHub Actions runs the unit tests and the smoke test on Windows and builds the installer and portable .exe on every push. The app has not been launched by hand on a Windows PC.
+- **The owner's PC.** The Windows checks above ran on GitHub's machines. The app has not been launched by hand on a real Windows PC, so display scaling, fonts and the theme look are unconfirmed there.
 - **Native dialogs.** The folder chooser and setup-file picker are not driven by the smoke test. The logic behind them is.
 - **OneDrive.** That backup copies sync to a second PC.
 - **The installer.** Install, upgrade and uninstall.
