@@ -73,6 +73,8 @@ export interface Entry {
   split: SplitSpec;
   a_cents: Cents;
   b_cents: Cents;
+  /** Set together: the purchase was paid from this fund, so it is in neither the budget nor the balance. */
+  fund_id: number | null;
   from_fund: boolean;
   split_of: number | null;
   recurring_id: number | null;
@@ -90,6 +92,8 @@ export interface EntryInput {
   split?: SplitSpec;
   account?: string | null;
   note?: string | null;
+  /** The fund this purchase was paid from, or null when it came out of the month's budget. */
+  paid_from_fund?: number | null;
 }
 
 export type EntryPatch = Partial<EntryInput>;
@@ -221,6 +225,8 @@ export interface PaycheckView {
   /** This person's share of bills due from this payday up to the next one. Empty unless asked for. */
   bills: { name: string; date: string; cents: Cents }[];
   bills_cents: Cents;
+  /** The month's planned savings, divided across the paychecks landing in that month. Zero unless asked for. */
+  set_aside_cents: Cents;
   next_pay_date: string;
 }
 
@@ -242,6 +248,8 @@ export interface PayMonth {
   bankHolidays: { date: string; name: string }[];
   paychecks: PaycheckView[];
   fit: { n: number; error: number; noBenefitsExtra: Cents | null } | null;
+  /** The group whose planned amounts count as money set aside from each paycheck. */
+  savingsGroup: string | null;
   /** Take-home landing in this month against what the budget plans for. */
   income: { category_id: number | null; category_name: string | null; expected_cents: Cents; planned_cents: Cents; checks: number };
   year: {
@@ -254,4 +262,80 @@ export interface PayMonth {
     hoursToGoal: number | null;
     checksLeft: number;
   };
+}
+
+// ---- savings -------------------------------------------------------------------
+
+export interface FundRow {
+  id: number;
+  name: string;
+  /** Whose savings this is: one person's, or the household's. */
+  owner: View;
+  target_cents: Cents | null;
+  /** The budget category that feeds the fund. Every expense in it is money set aside. */
+  category_id: number | null;
+  category_name: string | null;
+  emergency: boolean;
+  archived: boolean;
+  balance_cents: Cents;
+  /** Set aside and paid out in the month on screen. */
+  month_in_cents: Cents;
+  month_out_cents: Cents;
+}
+
+export interface FundInput {
+  name: string;
+  owner: View;
+  target_cents: Cents | null;
+  category_id: number | null;
+  emergency: boolean;
+  /** What is in the fund today. */
+  balance_cents: Cents;
+}
+
+export interface Runway {
+  /** The group whose spending is measured: the first one in Settings. */
+  group: string | null;
+  emergency_cents: Cents;
+  monthly_cents: Cents;
+  months: number | null;
+  /** Whether the monthly figure is real spending over the months before, or this month's plan. */
+  basis: "spending" | "plan";
+  monthsUsed: number;
+}
+
+/** Something that renews every so many months: a yearly subscription, a registration, a twice-yearly premium. */
+export interface RenewalRow {
+  id: number;
+  name: string;
+  category_id: number | null;
+  category_name: string | null;
+  months: number;
+  next_date: string;
+  amount_cents: Cents;
+  paid_by: Person;
+  split: TemplateSplit;
+  fund_id: number | null;
+  active: boolean;
+  a_cents: Cents;
+  b_cents: Cents;
+}
+
+export interface RenewalInput {
+  name: string;
+  category_id: number | null;
+  months: number;
+  next_date: string;
+  amount_cents: Cents;
+  paid_by: Person;
+  split: TemplateSplit;
+  fund_id: number | null;
+}
+
+export interface RenewalList {
+  rows: RenewalRow[];
+  /** Each person's share of a year of the active renewals. */
+  yearly_cents: Record<Person, Cents>;
+  /** Paychecks in a year, from each person's pay schedule. Null until their pay is set up. */
+  checksPerYear: Record<Person, number | null>;
 }

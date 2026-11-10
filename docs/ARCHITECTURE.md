@@ -19,7 +19,7 @@ Personal details (names, pay rate, real bills and amounts) are deliberately abse
 | Budget | Planned / Actual / Diff tables | Planned against actual per category for person A, person B or Household; Month / Year |
 | Bills & Split | Shared bills sheet and the bill-splitting app | Recurring bills with each share, running balance, Settle up, statement export |
 | Pay | Payroll calendar and the hours-to-pay table | Hours calendar, paychecks, predicted against real pay, paycheck plan, hours what-if, the year by payday |
-| Savings | Sinking fund rows and the renewals list | Fund balances and targets, yearly renewals, per-paycheck set-aside |
+| Savings | Sinking fund rows and the renewals list | Fund balances and targets, emergency runway, renewals, per-paycheck set-aside |
 
 Settings sits behind a gear: people, split, groups, categories, pay profile, API key, theme, backup.
 
@@ -85,9 +85,11 @@ The balance is one running number: what B owes on entries A paid, minus what A o
 
 ## Savings, renewals, year view (milestone 6)
 
-- **Funds:** name, owner, optional target, opening balance. Contributions are ordinary entries tagged with the fund; purchases paid from the fund draw it down. A Set balance button trues it up.
-- **Renewals:** bill templates with a yearly or multi-year cadence and a next date. The screen totals them and shows the set-aside per paycheck.
-- **Year view:** categories by month with totals and averages, plus hours and pay by month. Computed live.
+- **Funds:** a pot of savings with a name, an owner (one person or the household), an optional target and a balance. A fund is fed by one budget category: every expense in that category is money set aside into it. A purchase marked **Paid from** a fund draws the fund down and is in neither the month's budget nor the balance between the two people, because it was shared out when the money was set aside. Typing a balance trues the fund up; no entry is created.
+- **Emergency runway:** funds ticked Emergency, measured in months of spending in the first group (Needs). The monthly figure is the average of up to three earlier months, or this month's plan until there is spending to go on.
+- **Renewals:** things that come round every so many months (12 for yearly). Each becomes an ordinary entry on its date and its next date moves on. A renewal can be paid from a fund. The screen shows each person's yearly share and what to set aside per month and per paycheck.
+- **Paycheck plan:** a renewal due before the next payday counts with the bills unless a fund pays for it. The month's planned amounts in the last group (Savings) are spread over the paychecks landing in that month and shown as Set aside.
+- **Year view** (not built yet): categories by month with totals and averages, plus hours and pay by month. Computed live.
 
 ## Approved extras
 
@@ -98,9 +100,9 @@ The balance is one running number: what B owes on entries A paid, minus what A o
 | Split one purchase | Divide one receipt across categories; pieces stay linked | 2 (built) |
 | Subscription flag | Points out a repeating charge not in the bills yet | 3 |
 | Bill change flag | Marks a bill whose amount moved from last month | 4 (built) |
-| Hours what-if | Type hours, see the predicted paycheck | 5 |
+| Hours what-if | Type hours, see the predicted paycheck | 5 (built) |
 | Export | Any month or year to Excel or CSV | 6 |
-| Emergency fund runway | Months of Needs spending that savings would cover | 6 |
+| Emergency fund runway | Months of Needs spending that savings would cover | 6 (built) |
 | Budget rollover | Per-category switch carrying unused or overspent money forward | 6 |
 | Spending by merchant | Totals by store in the year view | 6 |
 | Phone glance page | Read-only dashboard PDF saved to the backup folder on close | 6 |
@@ -128,8 +130,8 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 | `categories` | Name, group, kind (expense or income), order, icon, rollover, archived |
 | `budget_lines` | Month, person, category, planned amount |
 | `months` | Month, person, starting balance |
-| `recurring` | Bill and renewal templates |
-| `funds` | Name, owner, target, opening balance |
+| `recurring` | Bill templates (monthly, with a due day) and renewals (every so many months, with a next date and an optional fund that pays) |
+| `funds` | Name, owner, target, starting amount, the category that feeds it, emergency tick, archived |
 | `merchants` | Merchant name with the category and split last used |
 | `imports` | One row per pasted batch, for undo |
 | `balance_checks` | Account, owner, date, balance |
@@ -145,6 +147,6 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 3. **Screenshot import**, balance snapshots, missing-entries check.
 4. **Bills & Split:** recurring templates, statement. *Built.* The bills-went-out check follows milestone 3.
 5. **Pay calendar** and predictions. *Built, except the tax-rule prediction, which waits for pay stubs.* The paycheck-landed check follows milestone 3.
-6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC.
+6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC. *Funds, the runway and renewals are built.*
 
 Each milestone is used on real data before the next begins. See [STATUS.md](STATUS.md).

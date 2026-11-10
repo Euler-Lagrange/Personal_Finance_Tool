@@ -6,13 +6,15 @@ import type { EntryKind } from "../../core/balance";
 import { monthOf, toISO } from "../../core/dates";
 import { formatMoney, parseMoney } from "../../core/money";
 import type { Person, SplitSpec } from "../../core/split";
-import type { Category, Entry, EntryPatch } from "../../shared/types";
+import type { Category, Entry, EntryPatch, FundRow } from "../../shared/types";
 import { AmountInput, Segmented, SplitSelect, TextCell } from "../components/ui";
+import { FundSelect } from "./Savings";
 
 const OPTIONAL_COLUMNS = [
   { id: "paid_by", label: "Paid by" },
   { id: "split", label: "Split" },
   { id: "share", label: "Share" },
+  { id: "fund", label: "Paid from" },
   { id: "account", label: "Account" },
   { id: "note", label: "Note" },
 ] as const;
@@ -33,6 +35,7 @@ const categoriesFor = (categories: Category[], kind: EntryKind, keepId?: number 
 
 export function Transactions({ month, view, settings, categories }: ScreenProps) {
   const entries = useQuery("entries.list", { month });
+  const funds = useQuery("funds.list", { month })?.funds ?? [];
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [splitting, setSplitting] = useState<number | null>(null);
@@ -46,7 +49,9 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
   }, [entries, search]);
 
   if (!entries) return null;
-  const has = (c: ColumnId) => columns.includes(c);
+  // The Paid from column also appears by itself when a purchase on screen was paid from a fund.
+  const has = (c: ColumnId) => columns.includes(c) || (c === "fund" && entries.some((e) => e.from_fund));
+  const columnCount = 6 + OPTIONAL_COLUMNS.filter((c) => has(c.id)).length;
   const toggleColumn = (c: ColumnId) => {
     const next = has(c) ? columns.filter((x) => x !== c) : [...columns, c];
     setColumns(next);
@@ -56,8 +61,11 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
   const allPicked = shown.length > 0 && picked.length === shown.length;
   const shareOf = (e: Entry) => (view === "hh" ? e.amount_cents : view === "a" ? e.a_cents : e.b_cents);
   const shareName = view === "hh" ? "Household" : settings.people[view];
-  const expenseTotal = shown.filter((e) => e.kind === "expense").reduce((t, e) => t + e.amount_cents, 0);
-  const shareTotal = shown.filter((e) => e.kind === "expense").reduce((t, e) => t + shareOf(e), 0);
+  // Purchases paid from a fund are not this month's spending, so they are totalled apart.
+  const spending = shown.filter((e) => e.kind === "expense" && !e.from_fund);
+  const expenseTotal = spending.reduce((t, e) => t + e.amount_cents, 0);
+  const shareTotal = spending.reduce((t, e) => t + shareOf(e), 0);
+  const fundTotal = shown.filter((e) => e.from_fund).reduce((t, e) => t + e.amount_cents, 0);
 
   const update = (id: number, patch: EntryPatch) => void change("entries.update", { id, patch });
   const remove = async (ids: number[]) => {
@@ -83,6 +91,7 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
         </label>
         <span className="muted">
           {shown.length} {shown.length === 1 ? "entry" : "entries"} · {formatMoney(expenseTotal)} spent{has("share") ? ` · ${shareName} ${formatMoney(shareTotal)}` : ""}
+          {fundTotal !== 0 ? ` · ${formatMoney(fundTotal)} paid from funds` : ""}
         </span>
         <div className="menu-wrap">
           <button type="button" className="btn ghost" aria-expanded={showColumns} onClick={() => setShowColumns(!showColumns)}>
@@ -138,6 +147,7 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
                 <th>Category</th>
                 {has("paid_by") && <th>Paid by</th>}
                 {has("split") && <th>Split</th>}
+                {has("fund") && <th title="A purchase paid from a fund draws the fund down and stays out of the month's budget">Paid from</th>}
                 {has("account") && <th>Account</th>}
                 {has("note") && <th>Note</th>}
                 <th className="num">Amount</th>
@@ -164,7 +174,8 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
                   onDelete={() => void remove([e.id])}
                   splitting={splitting === e.id}
                   onSplitToggle={() => setSplitting(splitting === e.id ? null : e.id)}
-                  columnCount={6 + columns.length}
+                  columnCount={columnCount}
+                  funds={funds}
                 />
               ))}
             </tbody>
@@ -297,6 +308,7 @@ function Row(props: {
   splitting: boolean;
   onSplitToggle: () => void;
   columnCount: number;
+  funds: FundRow[];
 }) {
   const { entry: e, has, settings, onUpdate } = props;
   const options = e.kind === "settlement" ? [] : categoriesFor(props.categories, e.kind, e.category_id);
@@ -336,6 +348,7 @@ function Row(props: {
           </td>
         )}
         {has("split") && <td>{e.kind === "expense" ? <SplitSelect value={e.split} settings={settings} ariaLabel="Split" onChange={(split) => onUpdate({ split })} /> : <span className="muted">{e.kind === "income" ? "Income" : ""}</span>}</td>}
+        {has("fund") && <td>{e.kind === "expense" && <FundSelect className="cell fund" funds={props.funds} value={e.from_fund ? e.fund_id : null} ariaLabel="Paid from" onChange={(paid_from_fund) => onUpdate({ paid_from_fund })} />}</td>}
         {has("account") && (
           <td>
             <TextCell value={e.account ?? ""} ariaLabel="Account" onCommit={(account) => onUpdate({ account })} />
@@ -349,7 +362,11 @@ function Row(props: {
         <td className="num">
           <AmountInput cents={e.amount_cents} ariaLabel="Amount" onCommit={(amount_cents) => onUpdate({ amount_cents })} />
         </td>
-        {has("share") && <td className="num muted">{e.kind === "settlement" ? "" : formatMoney(props.share)}</td>}
+        {has("share") && (
+          <td className="num muted" title={e.from_fund ? "Paid from a fund, so it is not part of the month's budget" : undefined}>
+            {e.kind === "settlement" ? "" : e.from_fund ? "–" : formatMoney(props.share)}
+          </td>
+        )}
         <td className="actions">
           {e.kind === "expense" && (
             <button type="button" className="icon-btn" aria-label="Split across categories" title="Split across categories" aria-expanded={props.splitting} onClick={props.onSplitToggle}>

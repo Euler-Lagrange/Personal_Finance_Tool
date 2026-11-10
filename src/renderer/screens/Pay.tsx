@@ -328,13 +328,18 @@ function Paychecks({ data, person, month }: { data: PayMonth; person: Person; mo
                 <th className="num" title="This person's share of the bills dated from this payday up to the next one">
                   Bills before next
                 </th>
+                {data.savingsGroup && (
+                  <th className="num" title={`What the budget plans for ${data.savingsGroup} that month, divided across the paychecks that land in it`}>
+                    Set aside
+                  </th>
+                )}
                 <th className="num">Left</th>
                 <th aria-label="Change dates" />
               </tr>
             </thead>
             <tbody>
               {data.paychecks.map((p, i) => (
-                <PaycheckRow key={i} p={p} person={person} hourly={hourly} hasFit={data.fit !== null} editing={editing === i} onEdit={() => setEditing(editing === i ? null : i)} />
+                <PaycheckRow key={i} p={p} person={person} hourly={hourly} hasFit={data.fit !== null} showSetAside={data.savingsGroup !== null} editing={editing === i} onEdit={() => setEditing(editing === i ? null : i)} />
               ))}
             </tbody>
           </table>
@@ -357,10 +362,11 @@ function Paychecks({ data, person, month }: { data: PayMonth; person: Person; mo
   );
 }
 
-function PaycheckRow(props: { p: PaycheckView; person: Person; hourly: boolean; hasFit: boolean; editing: boolean; onEdit: () => void }) {
+function PaycheckRow(props: { p: PaycheckView; person: Person; hourly: boolean; hasFit: boolean; showSetAside: boolean; editing: boolean; onEdit: () => void }) {
   const { p, person, hourly } = props;
   const update = (patch: PaycheckPatch) => void change("pay.updatePaycheck", { person, id: p.id, period_start: p.period_start, patch });
   const takeHome = p.actual_net_cents ?? p.predicted_net_cents;
+  const left = takeHome === null ? null : takeHome - p.bills_cents - p.set_aside_cents;
   const miss = p.actual_net_cents && p.predicted_net_cents !== null ? (p.predicted_net_cents - p.actual_net_cents) / p.actual_net_cents : null;
   const date = (label: string, key: "pay_date" | "period_start" | "period_end") => (
     <label>
@@ -445,7 +451,8 @@ function PaycheckRow(props: { p: PaycheckView; person: Person; hourly: boolean; 
           </details>
         )}
       </td>
-      <td className="num">{takeHome === null ? <span className="muted">–</span> : <span className={takeHome - p.bills_cents < 0 ? "money neg" : "money"}>{formatMoney(takeHome - p.bills_cents)}</span>}</td>
+      {props.showSetAside && <td className="num">{p.set_aside_cents === 0 ? <span className="muted">–</span> : <span className="money">{formatMoney(p.set_aside_cents)}</span>}</td>}
+      <td className="num">{takeHome === null ? <span className="muted">–</span> : <span className={left! < 0 ? "money neg" : "money"}>{formatMoney(left!)}</span>}</td>
       <td>
         <button type="button" className="icon-btn" aria-label={`Change the dates of the ${shortDate(p.pay_date)} paycheck`} aria-pressed={props.editing} title="Change the dates" onClick={props.onEdit}>
           <Pencil size={14} />

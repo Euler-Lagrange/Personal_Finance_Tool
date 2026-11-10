@@ -59,6 +59,22 @@ export function loadDemo(api: CoreApi, today: Date = new Date()): void {
   add(2, "Transfer to savings", 50000, "Savings", "b", 0);
   api["entries.create"]({ date: day(5), description: "Settle up", amount_cents: 10000, kind: "settlement", category_id: null, paid_by: "b" });
   loadDemoPay(api, toISO(today));
+  loadDemoSavings(api, toISO(today), cat);
+}
+
+/** Two funds, a purchase paid from one of them, and a few things that renew once a year. */
+function loadDemoSavings(api: CoreApi, today: string, cat: Map<string, number>): void {
+  api["funds.create"]({ name: "Emergency fund", owner: "hh", target_cents: 1500000, category_id: cat.get("Savings")!, emergency: true, balance_cents: 920000 });
+  const repairs = api["funds.create"]({ name: "Repairs and upkeep", owner: "hh", target_cents: 500000, category_id: cat.get("Sinking funds")!, emergency: false, balance_cents: 185000 });
+  const month = monthOf(today);
+  api["entries.create"]({ date: `${month}-03`, description: "Into the repairs fund", amount_cents: 20000, kind: "expense", category_id: cat.get("Sinking funds")!, paid_by: "a", split: { type: "percent", a: 100 } });
+  api["entries.create"]({ date: `${month}-06`, description: "Gutter repair", amount_cents: 18500, kind: "expense", category_id: cat.get("Housing")!, paid_by: "a", paid_from_fund: repairs });
+  const renewal = (name: string, category: string, days: number, amount_cents: number, months = 12) =>
+    api["renewals.create"]({ name, category_id: cat.get(category)!, months, next_date: addDays(today, days), amount_cents, paid_by: "a", split: { type: "default" }, fund_id: null });
+  renewal("Password manager", "Subscriptions", 6, 3600);
+  renewal("Car registration", "Transport", 95, 12800);
+  renewal("Domain name", "Subscriptions", 210, 1800);
+  renewal("Boiler service", "Housing", 150, 14000, 24);
 }
 
 /** Alex is paid by the hour every two weeks; Sam gets the same paycheck twice a month. */

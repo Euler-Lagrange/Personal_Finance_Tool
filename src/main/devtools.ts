@@ -49,9 +49,9 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
   };
   // A stuck step must fail the run, not hang it.
   const watchdog = setTimeout(() => {
-    check("smoke run finished in time", false, "timed out after 120 seconds");
+    check("smoke run finished in time", false, "timed out after 150 seconds");
     finish();
-  }, 120_000);
+  }, 150_000);
   const month = new Date().toISOString().slice(0, 7);
   const find = `(await rpc("entries.list", { month: "${month}" })).find((e) => e.description === "Smoke test market")`;
   try {
@@ -149,6 +149,39 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
       `return { heads: [...document.querySelectorAll("table.paychecks thead th")].map((th) => th.textContent.trim()), calendar: !!document.querySelector(".cal"), rows: document.querySelectorAll("table.paychecks tbody tr").length };`,
     );
     check("someone on a fixed paycheck gets paydays and no hours calendar", fixed.heads.includes("Expected") && !fixed.heads.includes("Hours") && !fixed.calendar && fixed.rows >= 2, fixed);
+
+    // ---- savings ----
+    const fundNamed = (name: string) => `(await rpc("funds.list", { month: "${todayISO.slice(0, 7)}" })).funds.find((f) => f.name === "${name}")`;
+    await page(`location.hash = "#/savings"; await sleep(900);
+      const form = document.querySelector("form.add-fund");
+      setValue(form.querySelector('input[placeholder="Emergency fund"]'), "Smoke fund");
+      setValue(form.querySelector('input[placeholder="0.00"]'), "500");
+      form.requestSubmit(); await sleep(700);`);
+    let smokeFund = await page<{ id: number; balance_cents: number } | undefined>(`return ${fundNamed("Smoke fund")};`);
+    check("a fund added on the Savings screen starts at the balance typed", smokeFund?.balance_cents === 50000, smokeFund);
+    await page(`commit(document.querySelector('input[aria-label="Balance of Smoke fund"]'), "620.00"); await sleep(600);`);
+    smokeFund = await page(`return ${fundNamed("Smoke fund")};`);
+    check("typing a fund's balance trues it up", smokeFund?.balance_cents === 62000, smokeFund);
+
+    await page(`location.hash = "#/transactions"; await sleep(800);
+      const select = rowOf("Smoke test market").querySelector('select[aria-label="Paid from"]');
+      setValue(select, [...select.options].find((o) => o.textContent === "Smoke fund").value); await sleep(700);`);
+    const fromFund = await page<{ from_fund: boolean } | undefined>(`return ${find};`);
+    smokeFund = await page(`return ${fundNamed("Smoke fund")};`);
+    check("a purchase marked as paid from a fund draws the fund down", fromFund?.from_fund === true && smokeFund?.balance_cents === 59000, [fromFund, smokeFund]);
+
+    await page(`location.hash = "#/savings"; await sleep(900);
+      const form = document.querySelector("form.add-renewal");
+      setValue(form.querySelector('input[placeholder="Car registration"]'), "Smoke renewal");
+      setValue(form.querySelector('input[placeholder="0.00"]'), "120");
+      form.requestSubmit(); await sleep(900);`);
+    const renewed = await page<{ next_date: string; amount_cents: number } | undefined>(`return (await rpc("renewals.list", { today: "${todayISO}" })).rows.find((r) => r.name === "Smoke renewal");`);
+    const renewalEntry = await page<{ amount_cents: number } | undefined>(`return (await rpc("entries.list", { month: "${todayISO.slice(0, 7)}" })).find((e) => e.description === "Smoke renewal");`);
+    check(
+      "a renewal due today becomes an entry and moves on a year",
+      renewed?.next_date === `${Number(todayISO.slice(0, 4)) + 1}${todayISO.slice(4)}` && renewalEntry?.amount_cents === 12000,
+      [renewed, renewalEntry],
+    );
 
     const pdf = path.join(path.dirname(reportFile), "statement.pdf");
     await page(`await rpc("statement.write", { month: "${todayISO.slice(0, 7)}", person: "b", file: ${JSON.stringify(pdf)} });`);

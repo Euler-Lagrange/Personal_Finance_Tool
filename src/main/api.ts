@@ -2,13 +2,14 @@ import { all, get, run, tx, type Db, type Row } from "./db";
 import { balance, balanceDelta, type BalanceEntry, type EntryKind } from "../core/balance";
 import { summarize, type BudgetRow } from "../core/budget";
 import { addDays, addMonths, daysInMonth, isISODate, isMonth, monthOf, toISO, weekday } from "../core/dates";
+import { addMonthsToDate, evenShare, fundBalance, openingFor, runwayMonths, yearlyCost } from "../core/savings";
 import { fitPay, grossPay, hoursToGoal, isOutsideKnown, payPeriods, predictPaycheck, usBankHolidays, type PayPeriod } from "../core/pay";
 import type { StatementData, StatementLine } from "../core/statement";
 import type { Cents } from "../core/money";
 import { computeShares, isValidSplit, MINE, THEIRS, type Person, type SplitSpec } from "../core/split";
 import type {
-  BillInput, BillRow, Category, DayTag, Entry, EntryInput, EntryPatch, KnownPaycheck, PayMonth, PayProfile, PayProfileInput, PayRate, PaySchedule,
-  PaySetup, PaycheckPatch, PaycheckView, Settings, SetupFile, TemplateSplit, View,
+  BillInput, BillRow, Category, DayTag, Entry, EntryInput, EntryPatch, FundInput, FundRow, KnownPaycheck, PayMonth, PayProfile, PayProfileInput, PayRate,
+  PaySchedule, PaySetup, PaycheckPatch, PaycheckView, RenewalInput, RenewalList, RenewalRow, Runway, Settings, SetupFile, TemplateSplit, View,
 } from "../shared/types";
 
 /** A message meant for the person using the app, shown next to the control that caused it. */
@@ -55,6 +56,7 @@ const KEYS: Record<string, string[]> = {
   months: ["month", "person"],
   settings: ["key"],
   recurring: ["id"],
+  funds: ["id"],
   pay_profiles: ["id"],
   paychecks: ["id"],
   work_days: ["date", "person"],
@@ -300,6 +302,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     split: JSON.parse(r.split_json as string) as SplitSpec,
     a_cents: r.a_cents as number,
     b_cents: r.b_cents as number,
+    fund_id: (r.fund_id as number) ?? null,
     from_fund: r.from_fund === 1,
     split_of: (r.split_of as number) ?? null,
     recurring_id: (r.recurring_id as number) ?? null,
@@ -337,7 +340,10 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
         throw new UserError((error as Error).message);
       }
     }
-    return { ...input, description, category_id, split, shares, account: input.account?.trim() || null, note: input.note?.trim() || null };
+    // Only a purchase can be paid from a fund.
+    const fund = input.kind === "expense" ? (input.paid_from_fund ?? null) : null;
+    if (fund !== null && !get(db, "select id from funds where id = ?", fund)) throw new UserError("That fund no longer exists");
+    return { ...input, description, category_id, split, shares, fund, account: input.account?.trim() || null, note: input.note?.trim() || null };
   }
 
   function insertEntry(input: EntryInput, extra: { split_of?: number; recurring_id?: number } = {}): number {
@@ -345,9 +351,10 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     const stamp = now();
     const id = run(
       db,
-      `insert into entries (date, description, amount_cents, kind, category_id, paid_by, account, split_json, a_cents, b_cents, split_of, recurring_id, note, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      e.date, e.description, e.amount_cents, e.kind, e.category_id, e.paid_by, e.account, JSON.stringify(e.split), e.shares.a, e.shares.b, extra.split_of ?? null, extra.recurring_id ?? null, e.note, stamp, stamp,
+      `insert into entries (date, description, amount_cents, kind, category_id, paid_by, account, split_json, a_cents, b_cents, fund_id, from_fund, split_of, recurring_id, note, created_at, updated_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      e.date, e.description, e.amount_cents, e.kind, e.category_id, e.paid_by, e.account, JSON.stringify(e.split), e.shares.a, e.shares.b, e.fund, e.fund === null ? 0 : 1,
+      extra.split_of ?? null, extra.recurring_id ?? null, e.note, stamp, stamp,
     ).lastInsertRowid as number;
     record("entries", { id }, true);
     return id;
@@ -380,12 +387,14 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
       split,
       account: patch.account !== undefined ? patch.account : old.account,
       note: patch.note !== undefined ? patch.note : old.note,
+      paid_from_fund: patch.paid_from_fund !== undefined ? patch.paid_from_fund : old.from_fund ? old.fund_id : null,
     });
     record("entries", { id });
     run(
       db,
-      `update entries set date = ?, description = ?, amount_cents = ?, kind = ?, category_id = ?, paid_by = ?, account = ?, split_json = ?, a_cents = ?, b_cents = ?, note = ?, updated_at = ? where id = ?`,
-      e.date, e.description, e.amount_cents, e.kind, e.category_id, e.paid_by, e.account, JSON.stringify(e.split), e.shares.a, e.shares.b, e.note, now(), id,
+      `update entries set date = ?, description = ?, amount_cents = ?, kind = ?, category_id = ?, paid_by = ?, account = ?, split_json = ?, a_cents = ?, b_cents = ?,
+         fund_id = ?, from_fund = ?, note = ?, updated_at = ? where id = ?`,
+      e.date, e.description, e.amount_cents, e.kind, e.category_id, e.paid_by, e.account, JSON.stringify(e.split), e.shares.a, e.shares.b, e.fund, e.fund === null ? 0 : 1, e.note, now(), id,
     );
   }
 
@@ -457,6 +466,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
             split: original.split,
             account: original.account,
             note: original.note,
+            paid_from_fund: original.from_fund ? original.fund_id : null,
           },
           { split_of: original.split_of ?? original.id, recurring_id: original.recurring_id ?? undefined },
         ),
@@ -579,7 +589,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
   function getBalance(args: { month?: string } = {}): { cents: Cents; openingCents: Cents; monthDeltaCents: Cents } {
     const rows = all<BalanceEntry & { date: string }>(
       db,
-      "select date, kind, paid_by, amount_cents, a_cents, b_cents from entries where kind in ('expense', 'settlement')",
+      // A purchase paid from a fund was shared out when the money was set aside, so it moves no balance.
+      "select date, kind, paid_by, amount_cents, a_cents, b_cents from entries where kind in ('expense', 'settlement') and from_fund = 0",
     );
     const opening = getSettings().openingBalanceCents;
     const inMonth = args.month ? rows.filter((r) => r.date.startsWith(args.month!)) : [];
@@ -770,8 +781,11 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
   }
 
   /** Deletes a bill template. The entries it created stay as ordinary entries. */
-  function removeBill(args: { id: number }): void {
-    mutate("Delete bill", () => {
+  const removeBill = (args: { id: number }) => removeTemplate("Delete bill", args.id);
+  const removeRenewal = (args: { id: number }) => removeTemplate("Delete renewal", args.id);
+  function removeTemplate(label: string, id: number): void {
+    const args = { id };
+    mutate(label, () => {
       templateOf(args.id);
       for (const e of all<Row>(db, "select id from entries where recurring_id = ?", args.id)) {
         record("entries", { id: e.id });
@@ -788,6 +802,265 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
       record("entries", { id: args.id });
       run(db, "update entries set seen_in_bank = ? where id = ?", args.seen ? 1 : 0, args.id);
     });
+  }
+
+  // ---- funds --------------------------------------------------------------
+
+  const OWNERS: View[] = ["a", "b", "hh"];
+  /** Money set aside into a fund: every expense in the category that feeds it, except ones paid from a fund. */
+  const fundIn = (categoryId: number | null, where = "", ...params: (string | number)[]) =>
+    categoryId === null ? 0 : get<{ t: number }>(db, `select coalesce(sum(amount_cents), 0) t from entries where category_id = ? and kind = 'expense' and from_fund = 0 ${where}`, categoryId, ...params)!.t;
+  /** Money paid out of a fund. */
+  const fundOut = (fundId: number, where = "", ...params: (string | number)[]) =>
+    get<{ t: number }>(db, `select coalesce(sum(amount_cents), 0) t from entries where fund_id = ? and from_fund = 1 ${where}`, fundId, ...params)!.t;
+  const fundById = (id: number): Row => {
+    const row = readRow("funds", { id });
+    if (!row) throw new UserError("That fund no longer exists");
+    return row;
+  };
+
+  function toFund(f: Row, month: string): FundRow {
+    const categoryId = (f.category_id as number) ?? null;
+    const like = `${month}-%`;
+    return {
+      id: f.id as number,
+      name: f.name as string,
+      owner: f.owner as View,
+      target_cents: (f.target_cents as number) ?? null,
+      category_id: categoryId,
+      category_name: categoryId === null ? null : (get<{ name: string }>(db, "select name from categories where id = ?", categoryId)?.name ?? null),
+      emergency: f.emergency === 1,
+      archived: f.archived === 1,
+      balance_cents: fundBalance(f.opening_cents as number, fundIn(categoryId), fundOut(f.id as number)),
+      month_in_cents: fundIn(categoryId, "and date like ?", like),
+      month_out_cents: fundOut(f.id as number, "and date like ?", like),
+    };
+  }
+
+  /** What a person plans for a group in a month. A month with no plan of its own stands on the latest one before it. */
+  function plannedInGroup(person: Person, month: string, group: string): Cents {
+    const from = get<{ m: string | null }>(db, "select max(month) m from budget_lines where person = ? and month <= ?", person, month)!.m;
+    if (!from) return 0;
+    return get<{ t: number }>(
+      db,
+      "select coalesce(sum(b.planned_cents), 0) t from budget_lines b join categories c on c.id = b.category_id where b.month = ? and b.person = ? and c.grp = ? and c.kind = 'expense'",
+      from, person, group,
+    )!.t;
+  }
+
+  /** How long the emergency funds would cover the first group's spending (Needs, unless the groups were changed). */
+  function runwayFor(month: string, funds: FundRow[]): Runway {
+    const group = getSettings().groups[0] ?? null;
+    const emergency = funds.filter((f) => f.emergency && !f.archived).reduce((t, f) => t + f.balance_cents, 0);
+    const months = all<{ m: string }>(db, "select distinct substr(date, 1, 7) m from entries where date < ? order by m desc limit 3", `${month}-01`).map((r) => r.m);
+    let monthly = 0;
+    if (group && months.length > 0) {
+      const spent = get<{ t: number }>(
+        db,
+        `select coalesce(sum(e.amount_cents), 0) t from entries e join categories c on c.id = e.category_id
+         where c.grp = ? and e.kind = 'expense' and e.from_fund = 0 and substr(e.date, 1, 7) in (${months.map(() => "?").join(", ")})`,
+        group, ...months,
+      )!.t;
+      monthly = evenShare(spent, months.length);
+    } else if (group) {
+      monthly = plannedInGroup("a", month, group) + plannedInGroup("b", month, group);
+    }
+    return { group, emergency_cents: emergency, monthly_cents: monthly, months: runwayMonths(emergency, monthly), basis: months.length > 0 ? "spending" : "plan", monthsUsed: months.length };
+  }
+
+  function listFunds(args: { month: string }): { funds: FundRow[]; runway: Runway } {
+    if (!isMonth(args.month)) throw new UserError("That month is not valid");
+    const funds = all<Row>(db, "select * from funds order by archived, name collate nocase, id").map((f) => toFund(f, args.month));
+    return { funds, runway: runwayFor(args.month, funds) };
+  }
+
+  function checkFund(input: Omit<FundInput, "balance_cents">, id: number | null) {
+    const name = (input.name ?? "").trim();
+    if (!name) throw new UserError("Enter a name for the fund");
+    if (get(db, "select id from funds where lower(name) = lower(?) and id is not ?", name, id)) throw new UserError("There is already a fund with that name");
+    if (!OWNERS.includes(input.owner)) throw new UserError("Choose whose fund this is");
+    if (input.target_cents !== null && (!Number.isInteger(input.target_cents) || input.target_cents <= 0)) throw new UserError("Enter a target, or leave it empty");
+    if (input.category_id !== null) {
+      if (get<{ kind: string }>(db, "select kind from categories where id = ?", input.category_id)?.kind !== "expense") throw new UserError("Choose the budget category that feeds this fund");
+      const taken = get<{ name: string }>(db, "select name from funds where category_id = ? and id is not ?", input.category_id, id);
+      if (taken) throw new UserError(`That category already feeds ${taken.name}`);
+    }
+    return { ...input, name };
+  }
+
+  function createFund(input: FundInput): number {
+    return mutate("Add fund", () => {
+      const f = checkFund(input, null);
+      if (!Number.isInteger(input.balance_cents)) throw new UserError("Enter what is in the fund today, or 0");
+      const id = run(
+        db,
+        "insert into funds (name, owner, target_cents, opening_cents, category_id, emergency) values (?, ?, ?, ?, ?, ?)",
+        f.name, f.owner, f.target_cents, openingFor(input.balance_cents, fundIn(f.category_id), 0), f.category_id, f.emergency ? 1 : 0,
+      ).lastInsertRowid as number;
+      record("funds", { id }, true);
+      return id;
+    });
+  }
+
+  /** Changes a fund. Pointing it at a different category keeps the balance it shows. */
+  function updateFund(args: { id: number; patch: Partial<Omit<FundInput, "balance_cents">> & { archived?: boolean } }): void {
+    mutate("Edit fund", () => {
+      const before = fundById(args.id);
+      const f = checkFund(
+        {
+          name: args.patch.name ?? (before.name as string),
+          owner: args.patch.owner ?? (before.owner as View),
+          target_cents: args.patch.target_cents !== undefined ? args.patch.target_cents : ((before.target_cents as number) ?? null),
+          category_id: args.patch.category_id !== undefined ? args.patch.category_id : ((before.category_id as number) ?? null),
+          emergency: args.patch.emergency ?? before.emergency === 1,
+        },
+        args.id,
+      );
+      const opening = (before.opening_cents as number) + fundIn((before.category_id as number) ?? null) - fundIn(f.category_id);
+      record("funds", { id: args.id });
+      run(
+        db,
+        "update funds set name = ?, owner = ?, target_cents = ?, category_id = ?, emergency = ?, opening_cents = ?, archived = ? where id = ?",
+        f.name, f.owner, f.target_cents, f.category_id, f.emergency ? 1 : 0, opening, args.patch.archived === undefined ? (before.archived as number) : args.patch.archived ? 1 : 0, args.id,
+      );
+    });
+  }
+
+  /** Trues a fund up to what is really in it. Nothing is added to the entries. */
+  function setFundBalance(args: { id: number; balance_cents: Cents }): void {
+    mutate("Set fund balance", () => {
+      const f = fundById(args.id);
+      if (!Number.isInteger(args.balance_cents)) throw new UserError("Enter what is in the fund");
+      record("funds", { id: args.id });
+      run(db, "update funds set opening_cents = ? where id = ?", openingFor(args.balance_cents, fundIn((f.category_id as number) ?? null), fundOut(args.id)), args.id);
+    });
+  }
+
+  function removeFund(args: { id: number }): void {
+    mutate("Delete fund", () => {
+      fundById(args.id);
+      if (get(db, "select id from entries where fund_id = ? limit 1", args.id)) throw new UserError("Purchases were paid from this fund. Archive it instead, so they stay out of the budget.");
+      for (const r of all<Row>(db, "select id from recurring where fund_id = ?", args.id)) {
+        record("recurring", { id: r.id });
+        run(db, "update recurring set fund_id = null where id = ?", r.id);
+      }
+      record("funds", { id: args.id });
+      run(db, "delete from funds where id = ?", args.id);
+    });
+  }
+
+  // ---- renewals -----------------------------------------------------------
+
+  const renewalMonths = (t: Row) => Number((t.cadence as string).slice("every:".length));
+  const toRenewalInput = (t: Row): RenewalInput => ({
+    name: t.name as string,
+    category_id: (t.category_id as number) ?? null,
+    months: renewalMonths(t),
+    next_date: t.next_date as string,
+    amount_cents: t.amount_cents as number,
+    paid_by: t.paid_by as Person,
+    split: JSON.parse(t.split_json as string) as TemplateSplit,
+    fund_id: (t.fund_id as number) ?? null,
+  });
+  const renewalById = (id: number): Row => {
+    const row = readRow("recurring", { id });
+    if (!row || !(row.cadence as string).startsWith("every:")) throw new UserError("That renewal no longer exists");
+    return row;
+  };
+
+  function checkRenewal(input: RenewalInput): RenewalInput {
+    const name = (input.name ?? "").trim();
+    if (!name) throw new UserError("Enter a name for the renewal");
+    if (!Number.isInteger(input.months) || input.months < 1 || input.months > 120) throw new UserError("Enter how many months pass between renewals, such as 12");
+    if (!isISODate(input.next_date)) throw new UserError("Enter the date it next renews");
+    if (!Number.isInteger(input.amount_cents) || input.amount_cents <= 0) throw new UserError("Enter what the renewal costs");
+    if (!isPerson(input.paid_by)) throw new UserError("Choose who pays the renewal");
+    if (input.split.type !== "default" && !isValidSplit(input.split)) throw new UserError("That split is not valid");
+    if (input.category_id !== null && get<{ kind: string }>(db, "select kind from categories where id = ?", input.category_id)?.kind !== "expense") throw new UserError("Choose an expense category");
+    if (input.fund_id !== null) fundById(input.fund_id);
+    try {
+      computeShares(input.amount_cents, resolveSplit(input.split));
+    } catch (error) {
+      throw new UserError((error as Error).message);
+    }
+    return { ...input, name };
+  }
+
+  function createRenewal(input: RenewalInput): number {
+    return mutate("Add renewal", () => {
+      const r = checkRenewal(input);
+      const id = run(
+        db,
+        "insert into recurring (name, category_id, cadence, next_date, amount_cents, paid_by, split_json, fund_id, active) values (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        r.name, r.category_id, `every:${r.months}`, r.next_date, r.amount_cents, r.paid_by, JSON.stringify(r.split), r.fund_id,
+      ).lastInsertRowid as number;
+      record("recurring", { id }, true);
+      return id;
+    });
+  }
+
+  function updateRenewal(args: { id: number; patch: Partial<RenewalInput> & { active?: boolean } }): void {
+    mutate("Edit renewal", () => {
+      const before = renewalById(args.id);
+      const r = checkRenewal({ ...toRenewalInput(before), ...args.patch });
+      record("recurring", { id: args.id });
+      run(
+        db,
+        "update recurring set name = ?, category_id = ?, cadence = ?, next_date = ?, amount_cents = ?, paid_by = ?, split_json = ?, fund_id = ?, active = ? where id = ?",
+        r.name, r.category_id, `every:${r.months}`, r.next_date, r.amount_cents, r.paid_by, JSON.stringify(r.split), r.fund_id,
+        args.patch.active === undefined ? (before.active as number) : args.patch.active ? 1 : 0, args.id,
+      );
+    });
+  }
+
+  /**
+   * A renewal whose date has come becomes an entry on that date, and its next date moves on.
+   * When it is paid from a fund, the entry draws the fund down and stays out of the month's budget.
+   */
+  function rollRenewalsForward(today: string) {
+    const due = all<Row>(db, "select * from recurring where active = 1 and cadence like 'every:%' and next_date <= ?", today);
+    if (due.length === 0) return;
+    tx(db, () => {
+      for (const t of due) {
+        const r = toRenewalInput(t);
+        let next = r.next_date;
+        // Catch up if the app was not opened for a while, but never run away.
+        for (let i = 0; i < 24 && next <= today; i++) {
+          insertEntry(
+            { date: next, description: r.name, amount_cents: r.amount_cents, kind: "expense", category_id: r.category_id, paid_by: r.paid_by, split: resolveSplit(r.split), paid_from_fund: r.fund_id },
+            { recurring_id: t.id as number },
+          );
+          next = addMonthsToDate(next, r.months);
+        }
+        run(db, "update recurring set next_date = ? where id = ?", next, t.id);
+      }
+      bumpRev();
+    });
+  }
+
+  const checksPerYear = (person: Person): number | null => {
+    const schedule = getPayProfile({ person })?.schedule;
+    if (!schedule) return null;
+    return schedule.rule === "biweekly" ? 26 : 12 * new Set(schedule.monthDays).size;
+  };
+
+  function listRenewals(args: { today: string }): RenewalList {
+    if (!isISODate(args.today)) throw new UserError("That date is not valid");
+    rollRenewalsForward(args.today);
+    const yearly = { a: 0, b: 0 };
+    const rows = all<Row>(
+      db,
+      "select r.*, c.name as category_name from recurring r left join categories c on c.id = r.category_id where r.cadence like 'every:%' order by r.active desc, r.next_date, r.id",
+    ).map((t): RenewalRow => {
+      const r = toRenewalInput(t);
+      const shares = computeShares(r.amount_cents, resolveSplit(r.split));
+      if (t.active === 1) {
+        yearly.a += yearlyCost(shares.a, r.months);
+        yearly.b += yearlyCost(shares.b, r.months);
+      }
+      return { id: t.id as number, ...r, category_name: (t.category_name as string) ?? null, active: t.active === 1, a_cents: shares.a, b_cents: shares.b };
+    });
+    return { rows, yearly_cents: yearly, checksPerYear: { a: checksPerYear("a"), b: checksPerYear("b") } };
   }
 
   // ---- pay ----------------------------------------------------------------
@@ -995,14 +1268,40 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
         }
       }
     }
+    // Renewals count too, unless a fund pays for them.
+    for (const t of all<Row>(db, "select * from recurring where cadence like 'every:%' and fund_id is null")) {
+      for (const e of all<{ date: string; c: number }>(db, `select date, ${person}_cents c from entries where recurring_id = ? and from_fund = 0 and date >= ? and date < ?`, t.id as number, from, before)) {
+        out.push({ name: t.name as string, date: e.date, cents: e.c });
+      }
+      if (t.active === 1 && (t.next_date as string) >= from && (t.next_date as string) < before) {
+        out.push({ name: t.name as string, date: t.next_date as string, cents: computeShares(t.amount_cents as number, resolveSplit(JSON.parse(t.split_json as string) as TemplateSplit))[person] });
+      }
+    }
     return out.sort((x, y) => x.date.localeCompare(y.date) || x.name.localeCompare(y.name));
   }
+
+  /** The last group in Settings is the savings one, unless the groups were changed. */
+  const savingsGroup = (): string | null => {
+    const groups = getSettings().groups;
+    return groups.length > 1 ? groups[groups.length - 1] : null;
+  };
 
   function paycheckViews(profile: PayProfile, from: string, to: string, withBills: boolean): PaycheckView[] {
     const person = profile.person;
     const fit = fitPay(knownPaychecks(profile));
     // Look far enough ahead that the last paycheck shown knows when the next one lands.
     const checks = checksBetween(person, profile.schedule, from, addDays(to, 62));
+    // Savings planned for a month are spread evenly over the paychecks that land in it.
+    const group = withBills ? savingsGroup() : null;
+    const perCheck = new Map<string, Cents>();
+    const setAside = (month: string): Cents => {
+      if (!group) return 0;
+      if (!perCheck.has(month)) {
+        const landing = checksBetween(person, profile.schedule, `${month}-01`, `${month}-${String(daysInMonth(month)).padStart(2, "0")}`).filter((c) => c.pay_date.startsWith(month)).length;
+        perCheck.set(month, evenShare(plannedInGroup(person, month, group), landing));
+      }
+      return perCheck.get(month)!;
+    };
     return checks.flatMap((c, i): PaycheckView[] => {
       if (!touches(c, from, to)) return [];
       const rate = rateAt(profile.rates, c.period_end);
@@ -1026,6 +1325,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
           uncertain: hourly && fit !== null && basis > 0 && isOutsideKnown(basis, fit),
           bills,
           bills_cents: bills.reduce((t, b) => t + b.cents, 0),
+          set_aside_cents: setAside(monthOf(c.pay_date)),
           next_pay_date: next,
         },
       ];
@@ -1053,7 +1353,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     const days = all<{ date: string; hours: number; tag: DayTag }>(db, "select date, hours, tag from work_days where person = ? and date >= ? and date <= ? order by date", args.person, gridStart, gridEnd);
     if (!profile) {
       return {
-        person: args.person, profile, gridStart, gridEnd, days, bankHolidays, paychecks: [], fit: null,
+        person: args.person, profile, gridStart, gridEnd, days, bankHolidays, paychecks: [], fit: null, savingsGroup: savingsGroup(),
         income: { category_id: null, category_name: null, expected_cents: 0, planned_cents: 0, checks: 0 },
         year: { year, checks: [], hours: 0, gross_cents: 0, net_cents: 0, sickUsedHours: 0, hoursToGoal: null, checksLeft: 0 },
       };
@@ -1068,7 +1368,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     const gross = inYear.reduce((t, v) => t + (v.actual_gross_cents ?? v.gross_cents), 0);
     const goal = profile.schedule.grossGoalCents;
     return {
-      person: args.person, profile, gridStart, gridEnd, days, bankHolidays, paychecks,
+      person: args.person, profile, gridStart, gridEnd, days, bankHolidays, paychecks, savingsGroup: savingsGroup(),
       fit: fit ? { n: fit.n, error: fit.error, noBenefitsExtra: fit.noBenefitsExtra } : null,
       income: { category_id: category?.id ?? null, category_name: category?.name ?? null, expected_cents: landing.reduce((t, v) => t + takeHome(v), 0), planned_cents: planned, checks: landing.length },
       year: {
@@ -1197,7 +1497,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     const settings = getSettings();
     const rows = all<BalanceEntry & { date: string; description: string; recurring_id: number | null }>(
       db,
-      "select date, description, kind, paid_by, amount_cents, a_cents, b_cents, recurring_id from entries where kind in ('expense', 'settlement') order by date, id",
+      "select date, description, kind, paid_by, amount_cents, a_cents, b_cents, recurring_id from entries where kind in ('expense', 'settlement') and from_fund = 0 order by date, id",
     );
     const start = `${args.month}-01`;
     const inMonth = rows.filter((r) => r.date.startsWith(args.month));
@@ -1251,8 +1551,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
       saveSettings(next);
 
       if (file.replaceCategories) {
-        const used = get<{ n: number }>(db, "select count(*) n from entries")!.n + get<{ n: number }>(db, "select count(*) n from recurring")!.n;
-        if (used > 0) throw new UserError("Categories can only be replaced before any entries or bills exist");
+        const used = ["entries", "recurring", "funds"].reduce((t, table) => t + get<{ n: number }>(db, `select count(*) n from ${table}`)!.n, 0);
+        if (used > 0) throw new UserError("Categories can only be replaced before any entries, bills or funds exist");
         for (const line of all<Row>(db, "select month, person, category_id from budget_lines")) record("budget_lines", line);
         run(db, "delete from budget_lines");
         for (const c of all<Row>(db, "select id from categories")) record("categories", { id: c.id });
@@ -1323,6 +1623,15 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     "bills.generate": generateBills,
     "bills.remove": removeBill,
     "statement.data": statementData,
+    "funds.list": listFunds,
+    "funds.create": createFund,
+    "funds.update": updateFund,
+    "funds.setBalance": setFundBalance,
+    "funds.remove": removeFund,
+    "renewals.list": listRenewals,
+    "renewals.create": createRenewal,
+    "renewals.update": updateRenewal,
+    "renewals.remove": removeRenewal,
     "pay.profile": getPayProfile,
     "pay.saveProfile": savePayProfile,
     "pay.removeRate": removePayRate,

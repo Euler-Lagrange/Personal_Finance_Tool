@@ -11,7 +11,7 @@ import { AmountInput, Card, SplitSelect, TextCell } from "../components/ui";
 type Props = Pick<ScreenProps, "month" | "settings" | "categories">;
 
 /** The split menu for a bill: the household default, a preset, or a custom share. */
-function BillSplit({ value, onChange, settings }: { value: TemplateSplit; onChange: (split: TemplateSplit) => void; settings: Props["settings"] }) {
+export function BillSplit({ value, onChange, settings }: { value: TemplateSplit; onChange: (split: TemplateSplit) => void; settings: Props["settings"] }) {
   return (
     <SplitSelect
       value={value.type === "default" ? null : value}

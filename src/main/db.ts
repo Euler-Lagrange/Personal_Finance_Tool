@@ -133,7 +133,13 @@ create table pay_profiles (
 /** v2: remember the last month each bill template created an entry for, so a deleted bill is not recreated. */
 const SCHEMA_V2 = `alter table recurring add column last_generated text;`;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2];
+/** A fund is fed by one budget category, and may count toward the emergency runway. */
+const SCHEMA_V3 = `
+alter table funds add column category_id integer references categories(id);
+alter table funds add column emergency integer not null default 0;
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3];
 export const MIGRATION_COUNT = MIGRATIONS.length;
 
 export function openDb(path: string): Db {

@@ -141,7 +141,7 @@ describe("bills", () => {
 describe("setup file and bills", () => {
   it("will not replace categories once a bill uses them", () => {
     api["bills.create"](bill({ amount_cents: 0 }));
-    expect(() => api["setup.import"]({ replaceCategories: true, categories: [{ name: "Rent", group: "Needs" }] })).toThrow("before any entries or bills exist");
+    expect(() => api["setup.import"]({ replaceCategories: true, categories: [{ name: "Rent", group: "Needs" }] })).toThrow("before any entries, bills or funds exist");
     expect(api["categories.list"]().some((c) => c.id === utilities)).toBe(true);
   });
 });

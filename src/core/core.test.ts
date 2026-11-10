@@ -4,6 +4,7 @@ import { computeShares, describeSplit, MINE, THEIRS } from "./split";
 import { balance, balanceDelta, whoOwes } from "./balance";
 import { addDays, addMonths, daysInMonth, isISODate, monthLabel, monthOf, weekday } from "./dates";
 import { summarize, type BudgetRow } from "./budget";
+import { addMonthsToDate, fundBalance, openingFor, perPeriod, runwayMonths, yearlyCost } from "./savings";
 import {
   biweeklyPeriods, businessDayOnOrBefore, fitLine, fitPay, grossPay, hoursToGoal, isOutsideKnown, meanAbsError, monthDayPeriods, payPeriods,
   predictNet, predictPaycheck, usBankHolidays,
@@ -218,5 +219,31 @@ describe("pay", () => {
     expect(hoursToGoal(10000000, 9434400, 4800)).toBe(117.9);
     expect(hoursToGoal(10000000, 10500000, 4800)).toBe(0);
     expect(hoursToGoal(10000000, 0, 0)).toBeNull();
+  });
+});
+
+describe("savings", () => {
+  it("keeps a fund's balance and its starting amount consistent", () => {
+    expect(fundBalance(50000, 30000, 12000)).toBe(68000);
+    expect(openingFor(68000, 30000, 12000)).toBe(50000);
+    expect(fundBalance(openingFor(123456, 999, 111), 999, 111)).toBe(123456);
+  });
+  it("measures a runway in months of spending", () => {
+    expect(runwayMonths(1500000, 400000)).toBe(3.8);
+    expect(runwayMonths(0, 400000)).toBe(0);
+    expect(runwayMonths(1500000, 0)).toBeNull();
+  });
+  it("spreads renewals over a year of paychecks without coming up short", () => {
+    expect(yearlyCost(12000, 12)).toBe(12000);
+    expect(yearlyCost(12000, 24)).toBe(6000);
+    expect(yearlyCost(9000, 3)).toBe(36000);
+    expect(perPeriod(76780, 26)).toBe(2954);
+    expect(perPeriod(76780, 26) * 26).toBeGreaterThanOrEqual(76780);
+    expect(perPeriod(76780, 0)).toBe(0);
+  });
+  it("steps a date by months and stays inside the month", () => {
+    expect(addMonthsToDate("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addMonthsToDate("2026-11-15", 12)).toBe("2027-11-15");
+    expect(addMonthsToDate("2024-02-29", 12)).toBe("2025-02-28");
   });
 });

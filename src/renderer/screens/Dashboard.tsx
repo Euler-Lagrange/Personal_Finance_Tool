@@ -67,6 +67,7 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
       <div className="stack">
         <NextPaycheck view={view} settings={settings} />
         <BillsDue />
+        <FundsCard month={month} view={view} />
         <Card title="Over plan">
           {over.length === 0 ? (
             <p className="muted">Every category is within its plan.</p>
@@ -99,7 +100,9 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
                   <td>{e.description}</td>
                   <td className="muted">{e.kind === "settlement" ? "Settlement" : (e.category_name ?? "Uncategorized")}</td>
                   <td className="num">{formatMoney(e.amount_cents)}</td>
-                  <td className="num muted">{e.kind === "settlement" ? "" : formatMoney(share(e))}</td>
+                  <td className="num muted" title={e.from_fund ? "Paid from a fund" : undefined}>
+                    {e.kind === "settlement" ? "" : e.from_fund ? "from a fund" : formatMoney(share(e))}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -107,6 +110,31 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
         )}
       </Card>
     </div>
+  );
+}
+
+/** Fund balances for whoever is on screen. Household funds show for everyone. */
+function FundsCard({ month, view }: Pick<ScreenProps, "month" | "view">) {
+  const data = useQuery("funds.list", { month });
+  const funds = (data?.funds ?? []).filter((f) => !f.archived && (view === "hh" || f.owner === view || f.owner === "hh"));
+  if (funds.length === 0) return null;
+  return (
+    <Card title="Funds" action={<a href="#/savings">Savings</a>}>
+      <ul className="plain">
+        {funds.map((f) => (
+          <li key={f.id} className="fund-line">
+            <div className="row-line">
+              <span>{f.name}</span>
+              <span className="money">
+                {formatMoney(f.balance_cents)}
+                {f.target_cents !== null && <span className="muted"> of {formatMoney(f.target_cents)}</span>}
+              </span>
+            </div>
+            {f.target_cents !== null && <Bar used={Math.max(0, Math.min(f.balance_cents, f.target_cents))} total={f.target_cents} />}
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -134,9 +162,9 @@ function NextPaycheck({ view, settings }: Pick<ScreenProps, "view" | "settings">
                 </span>
                 <strong className="money">{takeHome === null ? "–" : formatMoney(takeHome)}</strong>
               </div>
-              {takeHome !== null && check.bills_cents > 0 && (
+              {takeHome !== null && check.bills_cents + check.set_aside_cents > 0 && (
                 <p className="muted small">
-                  {formatMoney(check.bills_cents)} of bills before the one after, leaving {formatMoney(takeHome - check.bills_cents)}
+                  {formatMoney(check.bills_cents + check.set_aside_cents)} of bills and savings before the one after, leaving {formatMoney(takeHome - check.bills_cents - check.set_aside_cents)}
                 </p>
               )}
             </li>

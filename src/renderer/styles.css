@@ -47,8 +47,6 @@ ul.plain, ul.chips { list-style: none; margin: 0; padding: 0; }
 .span-2 { grid-column: span 2; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: 0 1px 2px var(--shadow); min-width: 0; }
 .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.card.coming { border-style: dashed; color: var(--muted); }
-.card.coming ul { margin: 0; padding-left: 18px; }
 .hero { grid-column: span 1; border-radius: 14px; padding: 20px; background: var(--hero-gradient, none), var(--hero-bg); background-color: var(--hero-bg); color: var(--hero-text); }
 .hero .eyebrow { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--hero-muted); }
 .hero-number { font: 600 34px/1.2 var(--number-font); margin: 6px 0 12px; }
@@ -180,7 +178,7 @@ select.cell.boxed, .quickadd select, .bulkbar select.cell { appearance: auto; }
 .form-grid .cell.percent { width: 96px; border-color: var(--input-border) !important; background: var(--surface) !important; text-align: left; }
 .table.edit td { padding: 3px 4px; }
 .table.edit th { padding: 9px 10px; }
-.table.edit td.wide { min-width: 170px; }
+.table.edit td.wide { min-width: 148px; }
 .table.edit select.cell.cat { min-width: 140px; }
 .table.edit .cell.date { width: 126px; min-width: 126px; padding-right: 2px; }
 .table.edit .cell.amount { min-width: 84px; }
@@ -258,3 +256,19 @@ select.cal-tag:hover, select.cal-tag:focus { color: var(--text); border-color: v
 .known-add { margin-top: 8px; }
 .known-add input:not([type="checkbox"]) { width: 120px; }
 .next-pay + .next-pay { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+
+/* savings */
+.runway { margin-bottom: 12px; }
+.table.funds td { vertical-align: top; padding-top: 5px; }
+.table.funds .cell.amount { width: 108px; min-width: 0; }
+.table.funds td .bar { margin: 2px 7px 4px; }
+.table.funds td.wide { min-width: 150px; }
+.table.funds th.check, .table.funds td.check { width: 84px; text-align: center; }
+.funds-note { margin-top: 8px; }
+.set-aside { margin-bottom: 10px !important; }
+.set-aside li { padding: 2px 0; }
+.table.renewals .cell.day { width: 44px; }
+.fund-line + .fund-line { margin-top: 4px; }
+.fund-line .bar { margin-bottom: 4px; }
+.add-fund .check-line, .add-renewal .check-line { height: 36px; }
+.quickadd label.check-line { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }

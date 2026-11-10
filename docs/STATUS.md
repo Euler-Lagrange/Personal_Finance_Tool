@@ -1,12 +1,12 @@
 # Status
 
-Last updated 2026-11-09. Milestones 1, 2, 4 and 5 are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet. Milestone 3 waits for sample screenshots; the tax-rule pay prediction waits for two pay stubs.
+Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and the first part of 6 (funds, runway, renewals) are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet. Milestone 3 waits for sample screenshots; the tax-rule pay prediction waits for two pay stubs.
 
 ## Built
 
 **Milestone 1: shell**
 
-- Window with six screens and Settings. Savings says which milestone it arrives in.
+- Window with six screens and Settings.
 - Fourteen themes, remembered per PC.
 - One SQLite data file with all thirteen tables.
 - Backup to a chosen folder on close and every ten minutes while there are changes; keeps this PC's last 30 copies plus one per month; any copy can be restored from Settings.
@@ -44,13 +44,22 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 are built and checked on Linux
 - Approved extra: hours what-if.
 - The setup file can carry each person's pay (rates, schedule, known paychecks).
 
+**Milestone 6, first part: savings**
+
+- Savings screen. Funds with an owner, a target, a balance that can be typed to true it up, and the budget category that feeds them. Archive keeps a fund's history.
+- A Paid from column on Transactions: a purchase paid from a fund draws the fund down and is in neither the month's budget nor the balance between the two people. The column appears by itself when a purchase on screen uses a fund.
+- Approved extra: emergency fund runway, in months of Needs spending.
+- Renewals every so many months: each becomes an entry on its date and moves on; it can be paid from a fund. Each person's yearly share, and what to set aside a month and a paycheck.
+- Pay: renewals count among the bills before the next payday, and a Set aside column spreads the month's planned savings over its paychecks.
+- Fund balances on the dashboard.
+
 ## Checked, and how
 
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Clean |
-| `npm test` (76 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals, bill creation and month roll-over, every kind of bill split, the change flag, switching off and deleting bills, the statement's figures and wording, pay periods for both schedules, bank holidays, paydays moved off holidays, hours and sick time, rates and raises, predictions and their limits, the no-benefits extra, usual hours, paychecks stored only when typed on, dates changed by hand, a changed schedule, the paycheck plan against bills, planned income, the year totals, a fixed paycheck, and pay in a setup file |
-| `npm run smoke` (22 steps in the real window) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, adds a bill, ticks Paid and changes its amount, types hours and a sick tag in the calendar, types a real take-home and undoes it, the what-if, plans income from paychecks, corrects the rate in Pay settings, the fixed-paycheck view, writes the statement PDF, backup folder, Restore, refused folder; the stored data is checked after each step |
+| `npm test` (96 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals, bill creation and month roll-over, every kind of bill split, the change flag, switching off and deleting bills, the statement's figures and wording, pay periods for both schedules, bank holidays, paydays moved off holidays, hours and sick time, rates and raises, predictions and their limits, the no-benefits extra, usual hours, paychecks stored only when typed on, dates changed by hand, a changed schedule, the paycheck plan against bills, planned income, the year totals, a fixed paycheck, pay in a setup file, fund balances from what is set aside and paid out, truing up, re-pointing and archiving a fund, purchases paid from a fund staying out of the budget and the balance, the runway from plan and from spending, renewals becoming entries and catching up, renewals paid from a fund, and renewals and savings in the paycheck plan |
+| `npm run smoke` (26 steps in the real window) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, adds a bill, ticks Paid and changes its amount, types hours and a sick tag in the calendar, types a real take-home and undoes it, the what-if, plans income from paychecks, corrects the rate in Pay settings, the fixed-paycheck view, adds a fund and trues it up, pays a purchase from it, adds a renewal that falls due, writes the statement PDF, backup folder, Restore, refused folder; the stored data is checked after each step |
 | `npm run shots` | Every screen reviewed in Slate and Marshmallow, including Pay with its settings open and the fixed-paycheck view |
 | Pay against real numbers | The owner's private setup file loads. On his 21 known paychecks the prediction misses by 0.65% on average, and its 80-hour figure is within 0.2% of the one in his spreadsheet. His real numbers stay out of this repository |
 | Statement PDF | Opened and read: two pages, totals add up, the balance sentence matches the app |
@@ -75,6 +84,8 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 are built and checked on Linux
 12. A person on a fixed paycheck was shown paydays from the neighbouring months. Now only the month's own; test added.
 13. In light themes the pay-period shading and the real-against-predicted bars could not be told apart. Colours changed and rechecked.
 14. A month's expected income ignored paychecks whose hours were not logged yet, so planning from it would have understated income. Those are now predicted at the usual hours; test added.
+15. The Transactions total counted purchases paid from a fund as this month's spending, disagreeing with the Budget screen. They are now totalled apart.
+16. With the Paid from column showing, the transactions table ran off the side of the window. Widths tightened and rechecked.
 
 ## Not checked yet
 
@@ -90,7 +101,9 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 are built and checked on Linux
 - The Paid tick is manual. Ticking it automatically from a checking screenshot ("bills went out") arrives with milestone 3.
 - Bill templates are monthly. Yearly renewals use the same table and arrive with milestone 6.
 - Pay has one prediction, from known paychecks. The tax-rule prediction needs two real pay stubs (one with no benefits taken out) to check against.
-- The paycheck plan subtracts bills only. Savings transfers join in milestone 6.
+- Which group counts as Needs (for the runway) and as Savings (for Set aside on Pay) goes by position: the first and the last group in Settings. Each screen names the group it used.
+- Paid from is set on the Transactions row. Quick-add does not offer it.
+- A renewal's next date steps by whole months, so one on the 31st settles on the 30th or 28th after a shorter month.
 - The year totals count only hours and paychecks entered in the app, so the first year in use starts part-way.
 - Gross is hours times the rate, with no overtime rate. The gross from a stub can be typed on any paycheck.
 - The bank holiday list is the United States one and is built in. A company holiday is added by tagging the day Holiday.
@@ -98,15 +111,13 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 are built and checked on Linux
 
 ## Next
 
-Milestone 6 needs nothing from the owner. Milestone 3 starts when sample screenshots arrive.
+The rest of milestone 6 needs nothing from the owner. Milestone 3 starts when sample screenshots arrive.
 
-**Milestone 6: savings and the year**
+**Milestone 6, the rest: the year**
 
-1. Funds on the Savings screen: name, owner, optional target, opening balance; contributions and spending are ordinary entries tagged with the fund; Set balance.
-2. Yearly renewals: bill templates with a yearly cadence and a next date; the per-paycheck set-aside, which also joins the paycheck plan on Pay.
-3. Year view: categories by month with totals and averages, plus hours and pay by month.
-4. Approved extras: export to Excel or CSV, emergency fund runway, budget rollover, spending by merchant, phone glance page.
-5. Load the newest backup automatically when the other PC opens the app.
+1. Year view: categories by month with totals and averages, plus hours and pay by month.
+2. Approved extras: export to Excel or CSV, budget rollover, spending by merchant, phone glance page.
+3. Load the newest backup automatically when the other PC opens the app.
 
 **Milestone 3: screenshot import**
 
@@ -137,3 +148,4 @@ Then, in the app:
 1. Settings: import the private setup file, choose a backup folder inside OneDrive, pick a theme.
 2. Pay, Pay settings: check the "Next paydays" line against the payroll schedule. Set up the second person's pay.
 3. Pay: log the hours for any pay period that has not been paid yet, so its paycheck is predicted.
+4. Savings: add each fund with what is in it today and the budget category that feeds it. Add the yearly renewals.
