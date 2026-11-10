@@ -24,7 +24,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/STATUS.md](docs/STAT
 1. Build one milestone at a time, in the order in `docs/STATUS.md`.
 2. Write unit tests for new maths and API methods. Test behaviour a person would notice and money invariants (shares add up, undo restores exactly), not implementation details.
 3. Extend the smoke test (`src/main/devtools.ts`) with the milestone's main path.
-4. Run `npm run check`, `npm run smoke` and `npm run shots`, and look at the screenshots.
+4. Run `npm run check`, `npm run smoke`, `npm run closecheck` and `npm run shots`, and look at the screenshots.
 5. Update `docs/STATUS.md`: what was built, what was checked and how, what was not checked.
 6. The owner uses the milestone on real data before the next one starts.
 

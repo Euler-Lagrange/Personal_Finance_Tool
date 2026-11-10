@@ -3,7 +3,7 @@ import { formatMoney, moneyInput, parseMoney } from "./money";
 import { computeShares, describeSplit, MINE, THEIRS } from "./split";
 import { balance, balanceDelta, whoOwes } from "./balance";
 import { addDays, addMonths, daysInMonth, isISODate, monthLabel, monthOf, weekday } from "./dates";
-import { summarize, type BudgetRow } from "./budget";
+import { carryOver, summarize, type BudgetRow } from "./budget";
 import { addMonthsToDate, fundBalance, openingFor, perPeriod, runwayMonths, yearlyCost } from "./savings";
 import {
   biweeklyPeriods, businessDayOnOrBefore, fitLine, fitPay, grossPay, hoursToGoal, isOutsideKnown, meanAbsError, monthDayPeriods, payPeriods,
@@ -108,7 +108,9 @@ describe("dates", () => {
 });
 
 describe("budget", () => {
-  const row = (name: string, grp: string, kind: "expense" | "income", planned: number, actual: number): BudgetRow => ({
+  const row = (name: string, grp: string, kind: "expense" | "income", planned: number, actual: number, carried = 0): BudgetRow => ({
+    carried,
+    rollover: carried !== 0,
     category_id: name.length,
     name,
     grp,
@@ -138,6 +140,14 @@ describe("budget", () => {
     expect(s.expenses).toEqual({ planned: 320000, actual: 307000 });
     expect(s.leftToSpend).toBe(13000);
     expect(s.net).toBe(103000);
+  });
+  it("carries unused money forward and takes overspending off", () => {
+    expect(carryOver([])).toBe(0);
+    expect(carryOver([{ planned: 10000, actual: 6000 }, { planned: 10000, actual: 13000 }, { planned: 12000, actual: 0 }])).toBe(13000);
+    const s = summarize([row("Clothes", "Wants", "expense", 10000, 2500, 4000), row("Dining", "Wants", "expense", 20000, 21000, -3000), row("Pay", "Income", "income", 500000, 0)], ["Wants"]);
+    expect(s.carried).toBe(1000);
+    expect(s.leftToSpend).toBe(30000 + 1000 - 23500);
+    expect(s.groups[0].planned).toBe(30000);
   });
 });
 

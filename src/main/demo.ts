@@ -75,6 +75,11 @@ function loadDemoSavings(api: CoreApi, today: string, cat: Map<string, number>):
   renewal("Car registration", "Transport", 95, 12800);
   renewal("Domain name", "Subscriptions", 210, 1800);
   renewal("Boiler service", "Housing", 150, 14000, 24);
+  // Hobbies rolls over: last month's plan was not all used, so the rest shows as carried this month.
+  const last = addMonths(month, -1);
+  api["budget.setPlanned"]({ month: last, person: "a", category_id: cat.get("Hobbies")!, planned_cents: 6000 });
+  api["entries.create"]({ date: `${last}-18`, description: "Craft store", amount_cents: 2500, kind: "expense", category_id: cat.get("Hobbies")!, paid_by: "a", split: { type: "percent", a: 100 } });
+  api["categories.update"]({ id: cat.get("Hobbies")!, patch: { rollover_from: last } });
 }
 
 /** Alex is paid by the hour every two weeks; Sam gets the same paycheck twice a month. */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, LayoutDashboard, List, PiggyBank, Scale, Settings as SettingsIcon, Target, Undo2, X } from "lucide-react";
-import { change, dismissToast, undoLast, useQuery, useToasts } from "./api";
+import { change, dismissToast, undoLast, useQuery, useToasts, call, toast } from "./api";
 import { applyTheme } from "./themes";
 import { addMonths, monthLabel, monthOf, toISO } from "../core/dates";
 import type { Category, Settings, View } from "../shared/types";
@@ -55,6 +55,11 @@ export function App() {
   useEffect(() => {
     if (local) applyTheme(local.theme);
   }, [local]);
+
+  // Said once when the window opens: for instance, that the other PC's newer copy was loaded.
+  useEffect(() => {
+    void call("app.notice").then((message) => message && toast(message), () => undefined);
+  }, []);
 
   // Ctrl+Z undoes the last saved change. While a text box holds typing that is not saved yet,
   // it undoes that typing instead.

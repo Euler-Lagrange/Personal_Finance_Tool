@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Check, FolderOpen, HardDriveDownload, Plus, RotateCcw, Trash2, Upload } from "lucide-react";
-import { change, toast, useQuery } from "../api";
+import { change, toast, useQuery, call } from "../api";
 import type { ScreenProps } from "../App";
 import type { Person, SplitSpec } from "../../core/split";
 import type { Category, Settings } from "../../shared/types";
@@ -295,7 +295,10 @@ function BackupCard() {
   if (!status) return null;
   const choose = async () => {
     const folder = await change("backup.chooseFolder");
-    if (folder) toast("Backup folder set and first copy written");
+    if (!folder) return;
+    // A fresh install pointed at the folder the other PC uses has just taken that PC's data.
+    const loaded = await call("app.notice").catch(() => null);
+    toast(loaded ?? "Backup folder set and first copy written");
   };
   const now = async () => {
     const file = await change("backup.now");
@@ -310,7 +313,7 @@ function BackupCard() {
   return (
     <Card title="Backup">
       <p className="muted">
-        A full copy is written here when you close the app, and every ten minutes while there are changes. Pick a folder inside OneDrive so the copies reach your other PC. The app keeps this PC's last 30 copies plus one per month.
+        A full copy is written here when you close the app, and every ten minutes while there are changes. Pick a folder inside OneDrive so the copies reach your other PC, and choose the same folder there: each PC then loads the other's newer copy when it opens, and asks first if both have changes. The app keeps this PC's last 30 copies plus one per month. A read-only page for your phone, finance-glance.pdf, is saved in the same folder.
       </p>
       <p>
         <strong>Folder:</strong> {status.folder ?? "not chosen yet"}

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, Repeat, X } from "lucide-react";
 import { change, toast, useQuery } from "../api";
 import type { ScreenProps } from "../App";
 import { summarize, type BudgetRow } from "../../core/budget";
@@ -63,7 +63,8 @@ export function Budget({ month, view, settings }: ScreenProps) {
       <tbody>
         {rows.map((r) => {
           const fixed = r.category_id === 0;
-          const diff = income ? r.actual - r.planned : r.planned - r.actual;
+          const diff = income ? r.actual - r.planned : r.planned + r.carried - r.actual;
+          const rollover = () => void change("categories.update", { id: r.category_id, patch: { rollover_from: r.rollover ? null : month } });
           return (
             <tr key={`${r.category_id}-${r.kind}`} className={r.archived ? "archived" : ""}>
               <td className="wide">
@@ -71,6 +72,11 @@ export function Budget({ month, view, settings }: ScreenProps) {
                   <CategoryIcon name={r.icon} />
                   {fixed ? r.name : <TextCell value={r.name} ariaLabel={`Name of ${r.name}`} onCommit={(name) => rename(r, name)} />}
                   {r.archived && <span className="tag">archived</span>}
+                  {r.carried !== 0 && (
+                    <span className={`tag ${r.carried < 0 ? "warn" : ""}`} title="Carried over from earlier months, because this category rolls over">
+                      {formatMoney(r.carried, { plus: true })} carried
+                    </span>
+                  )}
                 </span>
               </td>
               <td className="num">
@@ -85,9 +91,21 @@ export function Budget({ month, view, settings }: ScreenProps) {
                 <Money cents={diff} tone />
               </td>
               <td className="barcol">
-                <Bar used={r.actual} total={r.planned} />
+                <Bar used={r.actual} total={income ? r.planned : r.planned + r.carried} />
               </td>
               <td className="actions">
+                {!fixed && !income && !r.archived && (
+                  <button
+                    type="button"
+                    className={`icon-btn ${r.rollover ? "on" : ""}`}
+                    aria-pressed={r.rollover}
+                    aria-label={`Roll ${r.name} over to the next month`}
+                    title={r.rollover ? "Rolls over: what is unused or overspent carries into the next month. Click to stop." : `Roll over: carry what is unused or overspent into the next month, starting with ${monthLabel(month)}`}
+                    onClick={rollover}
+                  >
+                    <Repeat size={14} />
+                  </button>
+                )}
                 {!fixed && !r.archived && (
                   <button type="button" className="icon-btn" aria-label={`Remove ${r.name}`} title="Remove category" onClick={() => void remove(r)}>
                     <X size={14} />
@@ -104,7 +122,7 @@ export function Budget({ month, view, settings }: ScreenProps) {
           <td className="num">{formatMoney(total.planned)}</td>
           <td className="num">{formatMoney(total.actual)}</td>
           <td className="num">
-            <Money cents={income ? total.actual - total.planned : total.planned - total.actual} tone />
+            <Money cents={income ? total.actual - total.planned : total.planned + rows.reduce((t, r) => t + r.carried, 0) - total.actual} tone />
           </td>
           <td colSpan={2} />
         </tr>
@@ -128,7 +146,7 @@ export function Budget({ month, view, settings }: ScreenProps) {
           <p className="stat">
             <Money cents={s.leftToSpend} tone />
           </p>
-          <p className="muted">Planned minus used</p>
+          <p className="muted">{s.carried !== 0 ? `Planned, ${formatMoney(s.carried, { plus: true })} carried over, minus used` : "Planned minus used"}</p>
         </Card>
         <Card title="End balance">
           <p className="stat">{formatMoney(end)}</p>

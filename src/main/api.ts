@@ -1,8 +1,9 @@
 import { all, get, run, tx, type Db, type Row } from "./db";
 import { balance, balanceDelta, type BalanceEntry, type EntryKind } from "../core/balance";
-import { summarize, type BudgetRow } from "../core/budget";
+import { carryOver, summarize, type BudgetRow } from "../core/budget";
 import { addDays, addMonths, daysInMonth, isISODate, isMonth, monthLabel, monthOf, toISO, weekday } from "../core/dates";
 import type { ExportCell, ExportSheet } from "../core/csv";
+import type { GlanceData } from "../core/glance";
 import { summarizeYear, type YearLine, type YearRow } from "../core/year";
 import { addMonthsToDate, evenShare, fundBalance, openingFor, runwayMonths, yearlyCost } from "../core/savings";
 import { fitPay, grossPay, hoursToGoal, isOutsideKnown, payPeriods, predictPaycheck, usBankHolidays, type PayPeriod } from "../core/pay";
@@ -174,7 +175,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     kind: r.kind as Category["kind"],
     sort: r.sort as number,
     icon: (r.icon as string) ?? null,
-    rollover: r.rollover === 1,
+    rollover_from: (r.rollover_from as string) ?? null,
     archived: r.archived === 1,
   });
 
@@ -215,7 +216,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     });
   }
 
-  function updateCategory(args: { id: number; patch: Partial<Pick<Category, "name" | "grp" | "icon" | "rollover" | "archived">> }): Category {
+  function updateCategory(args: { id: number; patch: Partial<Pick<Category, "name" | "grp" | "icon" | "rollover_from" | "archived">> }): Category {
     return mutate("Edit category", () => {
       const existing = readRow("categories", { id: args.id });
       if (!existing) throw new UserError("That category no longer exists");
@@ -227,7 +228,11 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
         run(db, "update categories set grp = ? where id = ?", p.grp.trim(), args.id);
       }
       if (p.icon !== undefined) run(db, "update categories set icon = ? where id = ?", p.icon, args.id);
-      if (p.rollover !== undefined) run(db, "update categories set rollover = ? where id = ?", p.rollover ? 1 : 0, args.id);
+      if (p.rollover_from !== undefined) {
+        if (p.rollover_from !== null && !isMonth(p.rollover_from)) throw new UserError("That month is not valid");
+        if (p.rollover_from !== null && existing.kind !== "expense") throw new UserError("Only spending categories roll over");
+        run(db, "update categories set rollover_from = ?, rollover = ? where id = ?", p.rollover_from, p.rollover_from === null ? 0 : 1, args.id);
+      }
       if (p.archived !== undefined) {
         if (!p.archived) cleanCategoryName((readRow("categories", { id: args.id })!.name as string), args.id);
         run(db, "update categories set archived = ? where id = ?", p.archived ? 1 : 0, args.id);
@@ -498,6 +503,24 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     });
   }
 
+  /**
+   * What a rollover category carries into `month`: for each month since rollover was switched on,
+   * what was planned less what was spent. A month with no plan of its own stands on the latest one before it.
+   */
+  function carriedInto(categoryId: number, from: string, month: string, persons: Person[]): Cents {
+    const history: { planned: Cents; actual: Cents }[] = [];
+    for (const person of persons) {
+      for (let m = from; m < month; m = addMonths(m, 1)) {
+        const plan = get<{ m: string | null }>(db, "select max(month) m from budget_lines where person = ? and month <= ?", person, m)!.m;
+        history.push({
+          planned: plan ? (get<{ p: number }>(db, "select planned_cents p from budget_lines where month = ? and person = ? and category_id = ?", plan, person, categoryId)?.p ?? 0) : 0,
+          actual: get<{ t: number }>(db, `select coalesce(sum(${person}_cents), 0) t from entries where category_id = ? and kind = 'expense' and from_fund = 0 and date like ?`, categoryId, `${m}-%`)!.t,
+        });
+      }
+    }
+    return carryOver(history);
+  }
+
   function getBudget(args: { month: string; view: View }): { rows: BudgetRow[]; startBalanceCents: Cents } {
     if (!isMonth(args.month)) throw new UserError("That month is not valid");
     const persons: Person[] = args.view === "hh" ? ["a", "b"] : [args.view];
@@ -528,6 +551,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
         archived: c.archived,
         planned: planned.get(c.id) ?? 0,
         actual: actual.get(c.id) ?? 0,
+        carried: c.rollover_from !== null && c.kind === "expense" ? carriedInto(c.id, c.rollover_from, args.month, persons) : 0,
+        rollover: c.rollover_from !== null && c.kind === "expense",
       }))
       .filter((r) => !r.archived || r.planned !== 0 || r.actual !== 0);
     for (const r of actualRows.filter((x) => x.category_id === null && x.actual !== 0)) {
@@ -540,6 +565,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
         archived: false,
         planned: 0,
         actual: r.actual,
+        carried: 0,
+        rollover: false,
       });
     }
     const start = get<{ s: number | null }>(
@@ -1608,6 +1635,48 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     };
   }
 
+  // ---- phone glance page ---------------------------------------------------
+
+  /** A read-only picture of the current month for the phone: the dashboard's numbers, gathered in one place. */
+  function glanceData(): GlanceData {
+    const day = today();
+    const month = monthOf(day);
+    const { people, groups } = getSettings();
+    const view = (v: View, label: string): GlanceData["views"][number] => {
+      const s = summarize(getBudget({ month, view: v }).rows, groups);
+      return {
+        label,
+        leftToSpend: s.leftToSpend,
+        spent: s.expenses.actual,
+        available: s.expenses.planned + s.carried,
+        income: s.income.actual,
+        groups: s.groups.filter((g) => g.planned !== 0 || g.actual !== 0).map((g) => ({ grp: g.grp, actual: g.actual, planned: g.planned })),
+      };
+    };
+    const until = addDays(day, 7);
+    return {
+      asOf: (opts.now ? opts.now() : new Date()).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+      month,
+      names: people,
+      views: [view("hh", "Household"), view("a", people.a), view("b", people.b)],
+      balance: getBalance().cents,
+      billsDue: listBills({ month, today: day })
+        .rows.filter((r) => r.active && r.entry && !r.entry.seen_in_bank && r.entry.date >= day && r.entry.date <= until)
+        .map((r) => ({ name: r.name, date: r.entry!.date, cents: r.entry!.amount_cents })),
+      paychecks: (["a", "b"] as const).flatMap((person) => {
+        const next = nextPaycheck({ person });
+        return next ? [{ name: people[person], date: next.pay_date, cents: next.actual_net_cents ?? next.predicted_net_cents }] : [];
+      }),
+      funds: listFunds({ month })
+        .funds.filter((f) => !f.archived)
+        .map((f) => ({ name: f.name, cents: f.balance_cents, target: f.target_cents })),
+      recent: listEntries({ month })
+        .filter((e) => e.kind !== "settlement")
+        .slice(0, 8)
+        .map((e) => ({ date: e.date, description: e.description, cents: e.amount_cents, income: e.kind === "income" })),
+    };
+  }
+
   // ---- statement ----------------------------------------------------------
 
   /** One person's month: shared bills and purchases, settlements, the balance, and their budget. */
@@ -1644,7 +1713,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
             grp: g.grp,
             planned: g.planned,
             actual: g.actual,
-            rows: g.rows.filter((r) => r.planned !== 0 || r.actual !== 0).map((r) => ({ name: r.name, planned: r.planned, actual: r.actual })),
+            rows: g.rows.filter((r) => r.planned !== 0 || r.actual !== 0 || r.carried !== 0).map((r) => ({ name: r.name, planned: r.planned, actual: r.actual, carried: r.carried })),
           }))
           .filter((g) => g.rows.length > 0),
         income: { planned: budget.income.planned, actual: budget.income.actual },
@@ -1742,6 +1811,7 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     "bills.generate": generateBills,
     "bills.remove": removeBill,
     "statement.data": statementData,
+    "glance.data": glanceData,
     "year.get": getYear,
     "export.tables": exportTables,
     "funds.list": listFunds,

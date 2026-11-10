@@ -24,6 +24,7 @@ npm run dev -- --demo   # scratch folder with made-up data
 ```
 npm run check        # type check + unit tests
 npm run smoke        # opens the real window, types and clicks like a person, checks the stored data
+npm run closecheck   # runs the app as two PCs sharing a backup folder, closing each like a person
 npm run shots        # saves a picture of every screen into shots/
 ```
 

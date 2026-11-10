@@ -1,6 +1,9 @@
 import { app, type BrowserWindow } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { backupName, listBackups } from "./backup";
+import { markSeen } from "./sync";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,9 +53,9 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
   };
   // A stuck step must fail the run, not hang it.
   const watchdog = setTimeout(() => {
-    check("smoke run finished in time", false, "timed out after 150 seconds");
+    check("smoke run finished in time", false, "timed out after 180 seconds");
     finish();
-  }, 150_000);
+  }, 180_000);
   const month = new Date().toISOString().slice(0, 7);
   const find = `(await rpc("entries.list", { month: "${month}" })).find((e) => e.description === "Smoke test market")`;
   try {
@@ -204,6 +207,18 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
     );
     if (process.env.FINANCE_SMOKE_KEEP_XLSX) fs.copyFileSync(workbook, process.env.FINANCE_SMOKE_KEEP_XLSX);
 
+    // ---- rollover and the phone glance page ----
+    const rollButton = `document.querySelector('button[aria-label="Roll Dining out over to the next month"]')`;
+    await page(`location.hash = "#/dashboard"; await sleep(300); location.hash = "#/budget"; await sleep(800); ${rollButton}.click(); await sleep(600);`);
+    const dining = await page<{ rollover_from: string | null } | undefined>(`return (await rpc("categories.list")).find((c) => c.name === "Dining out");`);
+    const pressed = await page<string | null>(`return ${rollButton}.getAttribute("aria-pressed");`);
+    check("a category switched to roll over starts with the month on screen", dining?.rollover_from === todayISO.slice(0, 7) && pressed === "true", [dining, pressed]);
+    const glance = path.join(path.dirname(reportFile), "glance.pdf");
+    await page(`await rpc("glance.write", { file: ${JSON.stringify(glance)} });`);
+    const glanceBytes = fs.existsSync(glance) ? fs.readFileSync(glance) : Buffer.alloc(0);
+    check("the phone glance page is written as a PDF", glanceBytes.subarray(0, 5).toString() === "%PDF-" && glanceBytes.length > 5000, glanceBytes.length);
+    if (process.env.FINANCE_SMOKE_KEEP_GLANCE) fs.copyFileSync(glance, process.env.FINANCE_SMOKE_KEEP_GLANCE);
+
     const pdf = path.join(path.dirname(reportFile), "statement.pdf");
     await page(`await rpc("statement.write", { month: "${todayISO.slice(0, 7)}", person: "b", file: ${JSON.stringify(pdf)} });`);
     const bytes = fs.existsSync(pdf) ? fs.readFileSync(pdf) : Buffer.alloc(0);
@@ -224,6 +239,32 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
       const bad = await page<string>(`try { await rpc("backup.setFolder", { folder: ${dir} + "-missing" }); return "accepted"; } catch (e) { return e.message; }`);
       const still = await page<{ folder: string }>(`return await rpc("backup.status");`);
       check("a folder that cannot be written is refused and the old one kept", bad.startsWith("That folder cannot be used") && still.folder === process.env.FINANCE_SMOKE_BACKUP_DIR, [bad, still.folder]);
+
+      // ---- the other PC: plant copies in the folder as another PC would have left them ----
+      const folder = process.env.FINANCE_SMOKE_BACKUP_DIR;
+      await page(`await rpc("backup.now");`);
+      const here = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "local.json"), "utf8")) as { syncDevice: string; syncTakenAt: string };
+      const plant = (device: string, hoursAhead: number, description: string, builtOnOurs: boolean) => {
+        const file = path.join(folder, backupName(device, new Date(Date.now() + hoursAhead * 3600_000)));
+        fs.copyFileSync(path.join(folder, listBackups(folder).find((b) => b.device === here.syncDevice)!.file), file);
+        const copy = new DatabaseSync(file);
+        copy.prepare("update entries set description = ? where description = 'Smoke test market'").run(description);
+        if (builtOnOurs) markSeen(copy, { device: here.syncDevice, takenAt: here.syncTakenAt });
+        copy.close();
+      };
+      plant("OtherPC", 30, "From the other PC", true);
+      const loaded = await page<string | null>(`return await rpc("sync.check");`);
+      const taken = await page<{ description: string }[]>(`return await rpc("entries.list", { month: "${month}" });`);
+      check(
+        "a newer copy from the other PC, built on this PC's data, is loaded without asking",
+        (loaded ?? "").startsWith("Loaded the copy OtherPC") && taken.some((e) => e.description === "From the other PC") && taken.length === after.length,
+        loaded,
+      );
+      // A copy that does not include this PC's data needs the person's say-so, so nothing happens by itself.
+      plant("ThirdPC", 60, "Should not be loaded", false);
+      const held = await page<string | null>(`return await rpc("sync.check");`);
+      const kept = await page<{ description: string }[]>(`return await rpc("entries.list", { month: "${month}" });`);
+      check("a copy that was not built on this PC's data is never loaded by itself", held === null && kept.some((e) => e.description === "From the other PC") && !kept.some((e) => e.description === "Should not be loaded"), held);
     }
   } catch (error) {
     check("smoke run completed", false, String(error));

@@ -288,3 +288,8 @@ select.cal-tag:hover, select.cal-tag:focus { color: var(--text); border-color: v
 .toolbar .menu-wrap.next { margin-left: 0; }
 .menu.export-menu { padding: 6px; gap: 2px; }
 .menu.export-menu .btn { justify-content: flex-start; border-color: transparent; }
+
+/* rollover */
+.icon-btn.on { color: var(--accent-text); background: var(--accent-soft); }
+.tag.warn { color: var(--danger); }
+.table.budget td.actions { white-space: nowrap; }

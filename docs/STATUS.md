@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and most of 6 (funds, runway, renewals, year view, export) are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet. Milestone 3 waits for sample screenshots; the tax-rule pay prediction waits for two pay stubs.
+Last updated 2026-11-09. Milestones 1, 2, 4, 5 and 6 are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet. Milestone 3 waits for sample screenshots; the tax-rule pay prediction waits for two pay stubs.
 
 ## Built
 
@@ -60,16 +60,24 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and most of 6 (funds, runway, 
 - Approved extra: spending by merchant ("Where it went"), the 25 largest totals by description.
 - Approved extra: export. A month or a year to an Excel workbook, or the transactions to CSV, from the Transactions screen; the year view has its own Export button.
 
+**Milestone 6, third part: rollover, the phone page and two PCs**
+
+- Approved extra: budget rollover. A switch on each spending category; from the month it is switched on, what is unused or overspent carries into the next month. The Budget screen, dashboard and statement all count it.
+- Approved extra: phone glance page. `finance-glance.pdf`, a read-only picture of the month shaped for a phone, is saved in the backup folder whenever a backup is written.
+- Two PCs. When the app opens (and when its window is returned to after a while) it looks in the backup folder for a newer copy from the other PC. It loads it by itself only when nothing can be lost, asks when both PCs have changes, and a fresh install takes the newest copy when its backup folder is chosen.
+
 ## Checked, and how
 
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Clean |
-| `npm test` (107 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals, bill creation and month roll-over, every kind of bill split, the change flag, switching off and deleting bills, the statement's figures and wording, pay periods for both schedules, bank holidays, paydays moved off holidays, hours and sick time, rates and raises, predictions and their limits, the no-benefits extra, usual hours, paychecks stored only when typed on, dates changed by hand, a changed schedule, the paycheck plan against bills, planned income, the year totals, a fixed paycheck, pay in a setup file, fund balances from what is set aside and paid out, truing up, re-pointing and archiving a fund, purchases paid from a fund staying out of the budget and the balance, the runway from plan and from spending, renewals becoming entries and catching up, renewals paid from a fund, renewals and savings in the paycheck plan, the year view per person and household, merchant totals, pay by month, the export tables adding up, the Excel writer (zip read back byte for byte, typed cells, safe text) and CSV quoting |
-| `npm run smoke` (28 steps in the real window) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, adds a bill, ticks Paid and changes its amount, types hours and a sick tag in the calendar, types a real take-home and undoes it, the what-if, plans income from paychecks, corrects the rate in Pay settings, the fixed-paycheck view, adds a fund and trues it up, pays a purchase from it, adds a renewal that falls due, opens the year view, exports a year to Excel and a month to CSV, writes the statement PDF, backup folder, Restore, refused folder; the stored data is checked after each step |
+| `npm test` (124 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals, bill creation and month roll-over, every kind of bill split, the change flag, switching off and deleting bills, the statement's figures and wording, pay periods for both schedules, bank holidays, paydays moved off holidays, hours and sick time, rates and raises, predictions and their limits, the no-benefits extra, usual hours, paychecks stored only when typed on, dates changed by hand, a changed schedule, the paycheck plan against bills, planned income, the year totals, a fixed paycheck, pay in a setup file, fund balances from what is set aside and paid out, truing up, re-pointing and archiving a fund, purchases paid from a fund staying out of the budget and the balance, the runway from plan and from spending, renewals becoming entries and catching up, renewals paid from a fund, renewals and savings in the paycheck plan, the year view per person and household, merchant totals, pay by month, the export tables adding up, the Excel writer (zip read back byte for byte, typed cells, safe text), CSV quoting, rollover from the month it starts through changed plans and unopened months, the glance page's figures and markup, and two PCs passing data back and forth through one folder with real files (hand-offs, both changed, unsaved changes, a fresh install, an empty PC) |
+| `npm run smoke` (32 steps in the real window) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, adds a bill, ticks Paid and changes its amount, types hours and a sick tag in the calendar, types a real take-home and undoes it, the what-if, plans income from paychecks, corrects the rate in Pay settings, the fixed-paycheck view, adds a fund and trues it up, pays a purchase from it, adds a renewal that falls due, opens the year view, exports a year to Excel and a month to CSV, switches a category to roll over, writes the glance page, writes the statement PDF, backup folder, Restore, refused folder, loads a planted newer copy "from the other PC" that was built on this PC's data, and leaves alone one that was not; the stored data is checked after each step |
+| `npm run closecheck` (7 checks, two runs of the real app) | All pass. The app runs as one PC with made-up data and its window is closed the way a person would: it must quit cleanly and leave a backup and the glance page. It then runs as a fresh install on a second PC pointed at the same folder: it must come up holding the first PC's data and write nothing of its own |
 | `npm run shots` | Every screen reviewed in Slate and Marshmallow, including Pay with its settings open and the fixed-paycheck view |
 | Pay against real numbers | The owner's private setup file loads. On his 21 known paychecks the prediction misses by 0.65% on average, and its 80-hour figure is within 0.2% of the one in his spreadsheet. His real numbers stay out of this repository |
 | Statement PDF | Opened and read: two pages, totals add up, the balance sentence matches the app |
+| Glance page PDF | Opened and read: three phone-shaped pages, and the figures match the dashboard |
 | Excel export | Opened with a separate spreadsheet library (openpyxl): four sheets, real dates and amounts, bold frozen heading row, and each group's total equals the sum of its rows. Not yet opened in Excel itself |
 | Backup on close | Confirmed: file written, integrity check ok, all rows present |
 | `npm run dev` | Starts and renders |
@@ -94,12 +102,20 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and most of 6 (funds, runway, 
 14. A month's expected income ignored paychecks whose hours were not logged yet, so planning from it would have understated income. Those are now predicted at the usual hours; test added.
 15. The Transactions total counted purchases paid from a fund as this month's spending, disagreeing with the Budget screen. They are now totalled apart.
 16. With the Paid from column showing, the transactions table ran off the side of the window. Widths tightened and rechecked.
+17. A PC with nothing entered yet would have reloaded its own empty backup every time it opened. A copy no newer than what the PC already has is now ignored first; test added.
+18. One new test deleted a data file that was still open, which Windows refuses. The test now closes it first.
+19. The glance page's second and third pages started hard against the top edge. Page margins added and rechecked.
+20. Safety copies kept before each load from the other PC would have piled up for ever. Only the newest eight are kept now; test added.
+21. A fresh install that took the other PC's data then wrote an identical copy of its own, which the first PC would have reloaded for nothing. It now writes nothing until something changes; covered by the close-down check.
+22. Windows shutting down or signing out with the app open gave no chance to save. A backup is now written when Windows announces the session is ending. Not yet seen on real hardware.
 
 ## Not checked yet
 
 - **The owner's PC.** The Windows checks above ran on GitHub's machines. The app has not been launched by hand on a real Windows PC, so display scaling, fonts and the theme look are unconfirmed there.
 - **Native dialogs.** The folder chooser, setup-file picker and the statement's Save dialog are not driven by the smoke test. The logic behind them is.
 - **OneDrive.** That backup copies sync to a second PC.
+- **Two real PCs.** The hand-off was tested with two data files and one folder on one machine. OneDrive's own timing between two PCs, and the question shown when both have changes (a native dialog), have not been seen on real hardware.
+- **The glance page on a phone.** It was read on a desktop only.
 - **The installer.** Install, upgrade and uninstall.
 - **Excel itself.** The exported workbook was read back by a spreadsheet library, not opened in Excel.
 
@@ -113,6 +129,8 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and most of 6 (funds, runway, 
 - Which group counts as Needs (for the runway) and as Savings (for Set aside on Pay) goes by position: the first and the last group in Settings. Each screen names the group it used.
 - Paid from is set on the Transactions row. Quick-add does not offer it.
 - A renewal's next date steps by whole months, so one on the 31st settles on the 30th or 28th after a shorter month.
+- Which copy is newer goes by the time in the backup's name, so the two PCs' clocks need to be roughly right. Each PC is known by its computer name.
+- The glance page is rewritten only when a backup is written, so it can be a day or two behind on bills due.
 - The year totals count only hours and paychecks entered in the app, so the first year in use starts part-way.
 - Gross is hours times the rate, with no overtime rate. The gross from a stub can be typed on any paycheck.
 - The bank holiday list is the United States one and is built in. A company holiday is added by tagging the day Holiday.
@@ -120,13 +138,7 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and most of 6 (funds, runway, 
 
 ## Next
 
-The rest of milestone 6 needs nothing from the owner. Milestone 3 starts when sample screenshots arrive.
-
-**Milestone 6, the rest**
-
-1. Approved extra: budget rollover, a per-category switch that carries unused or overspent money forward from the month it is switched on.
-2. Approved extra: phone glance page, a read-only dashboard PDF saved to the backup folder on close.
-3. Load the newest backup automatically when the other PC opens the app.
+Everything that needs nothing from the owner is built. What is left waits on the owner: milestone 3 on sample screenshots, the tax-rule pay prediction on two pay stubs, and a first run by hand on a real PC.
 
 **Milestone 3: screenshot import**
 
@@ -158,3 +170,4 @@ Then, in the app:
 2. Pay, Pay settings: check the "Next paydays" line against the payroll schedule. Set up the second person's pay.
 3. Pay: log the hours for any pay period that has not been paid yet, so its paycheck is predicted.
 4. Savings: add each fund with what is in it today and the budget category that feeds it. Add the yearly renewals.
+5. On the second PC: install, then in Settings choose the same OneDrive backup folder. It takes the first PC's data by itself. From then on use one PC at a time and let OneDrive finish syncing before opening the other.

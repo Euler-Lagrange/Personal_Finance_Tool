@@ -6,6 +6,8 @@ import { listBackups, pruneBackups, restoreBackup, writeBackup } from "./backup"
 import { MIGRATION_COUNT, openDb, type Db } from "./db";
 import { loadDemo } from "./demo";
 import { toXlsx } from "./export";
+import { decideSync, isPristine, markSeen, newestCandidate } from "./sync";
+import { glanceHtml } from "../core/glance";
 import { toCsv } from "../core/csv";
 import type { ExportRequest } from "../shared/types";
 import { runSmoke, takeShots } from "./devtools";
@@ -24,6 +26,13 @@ let db: Db;
 let core: CoreApi;
 let win: BrowserWindow | null = null;
 let lastError: string | null = null;
+/** Something the window should tell the person once, such as data having been loaded from the other PC. */
+let notice: string | null = null;
+let lastSyncCheck = 0;
+
+/** Automated runs must never stop on a question nobody is there to answer. */
+const unattended = () => Boolean(process.env.FINANCE_SMOKE || process.env.FINANCE_SHOTS);
+const GLANCE_FILE = "finance-glance.pdf";
 
 const dataFile = () => path.join(app.getPath("userData"), "finance.db");
 const localFile = () => path.join(app.getPath("userData"), "local.json");
@@ -45,7 +54,9 @@ function backupIfChanged(force = false): BackupFile | null {
     const now = new Date();
     const file = writeBackup(db, config.backupFolder, config.device, now);
     pruneBackups(config.backupFolder, config.device);
-    saveLocal({ lastBackupRev: rev, lastBackupAt: now.toISOString() });
+    // A copy written with nothing changed is the same data as before, so it does not move the sync point.
+    const moved = config.lastBackupRev !== rev || !config.syncTakenAt;
+    saveLocal({ lastBackupRev: rev, lastBackupAt: now.toISOString(), ...(moved ? { syncDevice: file.device, syncTakenAt: file.takenAt } : {}) });
     lastError = null;
     return file;
   } catch (error) {
@@ -54,10 +65,91 @@ function backupIfChanged(force = false): BackupFile | null {
   }
 }
 
+/**
+ * Looks in the backup folder for a newer copy saved by the other PC. It is loaded straight away when
+ * that cannot lose anything; when both PCs have changes, the person chooses. Returns what was loaded.
+ */
+function syncFromOtherPc(): string | null {
+  const config = local();
+  if (!config.backupFolder || !db?.isOpen) return null;
+  lastSyncCheck = Date.now();
+  let decision;
+  try {
+    const pristine = isPristine(db);
+    decision = decideSync({
+      candidate: newestCandidate(config.backupFolder, config.device, pristine),
+      state: config.syncDevice && config.syncTakenAt ? { device: config.syncDevice, takenAt: config.syncTakenAt } : null,
+      dirty: config.lastBackupRev !== core["meta.rev"](),
+      pristine,
+      skipped: config.syncSkipped ?? null,
+    });
+  } catch {
+    return null;
+  }
+  if (decision.action === "none") return null;
+  const { candidate } = decision;
+  const when = new Date(candidate.takenAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  if (decision.action === "ask") {
+    if (unattended()) return null;
+    const choice = dialog.showMessageBoxSync({
+      type: "question",
+      title: "Two copies of your data",
+      message: `${candidate.device} saved a newer copy on ${when}, and this PC has changes that copy does not include.`,
+      detail: `Using ${candidate.device}'s copy replaces what is on this PC. A safety copy of this PC's data is kept beside the data file. Keeping this PC's data leaves the other copy in the backup folder, where Settings can still restore it.`,
+      buttons: [`Use ${candidate.device}'s copy`, "Keep this PC's data"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (choice !== 0) {
+      saveLocal({ syncSkipped: candidate.takenAt });
+      return null;
+    }
+  }
+  db.close();
+  try {
+    restoreBackup(path.join(config.backupFolder, candidate.file), dataFile(), MIGRATION_COUNT, new Date());
+  } catch (error) {
+    openData();
+    lastError = `The newer copy from ${candidate.device} could not be loaded: ${(error as Error).message}`;
+    return null;
+  }
+  openData();
+  markSeen(db, candidate);
+  saveLocal({ syncDevice: candidate.device, syncTakenAt: candidate.takenAt, syncSkipped: undefined, lastBackupRev: core["meta.rev"]() });
+  return `Loaded the copy ${candidate.device} saved on ${when}`;
+}
+
+/** Writes the phone glance page beside the backups. It is a convenience, so a failure is never an error. */
+async function writeGlance(file: string): Promise<string> {
+  const html = glanceHtml(core["glance.data"]());
+  const page = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+  try {
+    await page.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    // A tall, narrow page reads on a phone without zooming.
+    fs.writeFileSync(file, await page.webContents.printToPDF({ printBackground: true, pageSize: { width: 4.4, height: 9.4 }, margins: { top: 0.22, bottom: 0.22, left: 0, right: 0 } }));
+    return file;
+  } finally {
+    page.destroy();
+  }
+}
+const refreshGlance = (): Promise<unknown> => {
+  const folder = local().backupFolder;
+  return folder && !unattended() ? writeGlance(path.join(folder, GLANCE_FILE)).catch(() => undefined) : Promise.resolve();
+};
+
 /** Points backups at a folder and writes the first copy straight away, so a bad folder is reported now. */
 function setBackupFolder(folder: string): string {
   const previous = local().backupFolder;
   saveLocal({ backupFolder: folder, lastBackupRev: undefined });
+  // A fresh install pointed at a folder the other PC already uses takes that PC's data first,
+  // so its own empty copy never becomes the newest thing in the folder.
+  const loaded = fs.existsSync(folder) && isPristine(db) ? syncFromOtherPc() : null;
+  if (loaded) {
+    // The folder plainly works, and this PC now holds exactly what was in it: nothing to write yet.
+    notice = loaded;
+    return folder;
+  }
   backupIfChanged(true);
   if (lastError) {
     const message = lastError;
@@ -68,7 +160,6 @@ function setBackupFolder(folder: string): string {
   return folder;
 }
 
-/** Renders one person's statement for a month and writes it as a PDF. */
 /** Writes a month or year as an Excel workbook, or its transactions as CSV (with a mark so Excel reads accents correctly). */
 function writeExport(args: ExportRequest & { format: "xlsx" | "csv" }, file: string): string {
   const { sheets } = core["export.tables"](args);
@@ -76,6 +167,7 @@ function writeExport(args: ExportRequest & { format: "xlsx" | "csv" }, file: str
   return file;
 }
 
+/** Renders one person's statement for a month and writes it as a PDF. */
 async function writeStatement(month: string, person: Person, file: string): Promise<string> {
   const html = statementHtml(core["statement.data"]({ month, person }));
   const page = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
@@ -96,6 +188,12 @@ function createShellApi() {
     },
     "local.setTheme": (args: { theme: string }): void => saveLocal({ theme: args.theme }),
     "app.info": () => ({ version: app.getVersion(), dataFile: dataFile() }),
+    /** Hands over, once, anything the window should tell the person. */
+    "app.notice": (): string | null => {
+      const message = notice;
+      notice = null;
+      return message;
+    },
 
     "backup.status": (): BackupStatus => {
       const config = local();
@@ -115,6 +213,7 @@ function createShellApi() {
       if (!local().backupFolder) throw new UserError("Choose a backup folder first");
       const file = backupIfChanged(true);
       if (!file) throw new UserError(lastError ?? "The backup could not be written");
+      void refreshGlance();
       return file;
     },
     "backup.list": (): BackupFile[] => {
@@ -154,6 +253,15 @@ function createShellApi() {
       if (result.canceled || !result.filePath) return null;
       saveLocal({ statementFolder: path.dirname(result.filePath) });
       return writeStatement(args.month, args.person, result.filePath);
+    },
+    // Used by the smoke test only: it plants a copy "from another PC" and checks that it is taken in.
+    "sync.check": (): string | null => {
+      if (!process.env.FINANCE_SMOKE) throw new UserError("The other PC's copies are checked when the app starts");
+      return syncFromOtherPc();
+    },
+    "glance.write": (args: { file: string }): Promise<string> => {
+      if (!process.env.FINANCE_SMOKE) throw new UserError("The glance page is saved with the backups");
+      return writeGlance(args.file);
     },
     // Used by the smoke test only: a screen never chooses where a file is written.
     "statement.write": (args: { month: string; person: Person; file: string }): Promise<string> => {
@@ -217,6 +325,10 @@ function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   win.on("closed", () => (win = null));
+  // Windows is shutting down or signing out: there may be no orderly quit, so save a copy now.
+  win.on("session-end", () => {
+    if (db?.isOpen) backupIfChanged();
+  });
 }
 
 app.whenReady().then(() => {
@@ -230,6 +342,9 @@ app.whenReady().then(() => {
   }
   if (process.env.FINANCE_THEME) saveLocal({ theme: process.env.FINANCE_THEME });
   if (process.env.FINANCE_BACKUP_DIR) saveLocal({ backupFolder: path.resolve(process.env.FINANCE_BACKUP_DIR) });
+  if (process.env.FINANCE_DEVICE) saveLocal({ device: process.env.FINANCE_DEVICE });
+  // Before anything is shown: take in a newer copy from the other PC, if there is one.
+  notice = syncFromOtherPc();
   const shellApi = createShellApi();
 
   ipcMain.handle("rpc", async (_event, method: string, arg: unknown) => {
@@ -244,16 +359,45 @@ app.whenReady().then(() => {
   });
 
   createWindow();
-  setInterval(() => backupIfChanged(), BACKUP_EVERY_MS);
+  setInterval(() => {
+    if (backupIfChanged()) void refreshGlance();
+  }, BACKUP_EVERY_MS);
+  // Coming back to an app left open: the other PC may have been used in the meantime.
+  win!.on("focus", () => {
+    if (Date.now() - lastSyncCheck < 60_000 || unattended()) return;
+    const loaded = syncFromOtherPc();
+    if (loaded) {
+      notice = loaded;
+      win?.webContents.reload();
+    }
+  });
+  // For the close-down check: shut the window as a person would, a few seconds after it opens.
+  if (process.env.FINANCE_CLOSE_AFTER) setTimeout(() => win?.close(), Number(process.env.FINANCE_CLOSE_AFTER));
   if (process.env.FINANCE_SHOTS) win!.webContents.once("did-finish-load", () => void takeShots(win!, process.env.FINANCE_SHOTS!));
   if (process.env.FINANCE_SMOKE) win!.webContents.once("did-finish-load", () => void runSmoke(win!, process.env.FINANCE_SMOKE!));
 });
 
-app.on("before-quit", () => {
-  if (db?.isOpen) {
-    backupIfChanged();
+// Closing: write a backup if anything changed, then the glance page, then quit. Writing the page takes
+// a moment and uses a hidden window, so quitting is held until it is done or six seconds have passed.
+let closing: "no" | "working" | "done" = "no";
+app.on("before-quit", (event) => {
+  if (closing === "done" || !db?.isOpen) return;
+  if (closing === "working") return event.preventDefault();
+  const wrote = backupIfChanged();
+  if (!wrote || unattended()) {
     db.close();
+    closing = "done";
+    return;
   }
+  closing = "working";
+  event.preventDefault();
+  void Promise.race([refreshGlance(), new Promise((resolve) => setTimeout(resolve, 6000))]).finally(() => {
+    closing = "done";
+    if (db.isOpen) db.close();
+    app.quit();
+  });
 });
 
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", () => {
+  if (closing !== "working") app.quit();
+});

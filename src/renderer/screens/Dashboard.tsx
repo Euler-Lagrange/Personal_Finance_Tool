@@ -15,7 +15,7 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
   if (!budget || !entries) return null;
   const s = summarize(budget.rows, settings.groups);
   const who = view === "hh" ? "Household" : settings.people[view];
-  const over = s.groups.flatMap((g) => g.rows).filter((r) => r.actual > r.planned && r.planned > 0);
+  const over = s.groups.flatMap((g) => g.rows).filter((r) => r.actual > r.planned + r.carried && r.planned > 0);
   const share = (e: (typeof entries)[number]) => (view === "hh" ? e.amount_cents : view === "a" ? e.a_cents : e.b_cents);
 
   return (
@@ -23,9 +23,10 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
       <section className="hero">
         <p className="eyebrow">{who} · left to spend</p>
         <p className="hero-number">{formatMoney(s.leftToSpend)}</p>
-        <Bar used={s.expenses.actual} total={s.expenses.planned} />
+        <Bar used={s.expenses.actual} total={s.expenses.planned + s.carried} />
         <p className="hero-sub">
           {formatMoney(s.expenses.actual)} used of {formatMoney(s.expenses.planned)} planned
+          {s.carried !== 0 && `, with ${formatMoney(s.carried, { plus: true })} carried over`}
         </p>
       </section>
 
@@ -78,7 +79,7 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
                   <span className="with-icon">
                     <CategoryIcon name={r.icon} /> {r.name}
                   </span>
-                  <span className="money neg">{formatMoney(r.actual - r.planned)} over</span>
+                  <span className="money neg">{formatMoney(r.actual - r.planned - r.carried)} over</span>
                 </li>
               ))}
             </ul>

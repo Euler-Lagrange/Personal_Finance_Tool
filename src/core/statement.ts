@@ -15,7 +15,7 @@ export interface StatementBudgetGroup {
   grp: string;
   planned: Cents;
   actual: Cents;
-  rows: { name: string; planned: Cents; actual: Cents }[];
+  rows: { name: string; planned: Cents; actual: Cents; carried: Cents }[];
 }
 
 /** Everything one person needs to see for a month. Balances use the app's sign: positive means B owes A. */
@@ -66,8 +66,8 @@ ${data.settlements.map((s) => `<tr><td>${shortDate(s.date)}</td><td>${esc(names[
 </tbody></table>`;
   const budgetRows = data.budget.groups
     .map(
-      (g) => `<tr class="group"><td>${esc(g.grp)}</td><td class="num">${formatMoney(g.planned)}</td><td class="num">${formatMoney(g.actual)}</td><td class="num">${formatMoney(g.planned - g.actual)}</td></tr>
-${g.rows.map((r) => `<tr><td class="indent">${esc(r.name)}</td><td class="num">${formatMoney(r.planned)}</td><td class="num">${formatMoney(r.actual)}</td><td class="num">${formatMoney(r.planned - r.actual)}</td></tr>`).join("\n")}`,
+      (g) => `<tr class="group"><td>${esc(g.grp)}</td><td class="num">${formatMoney(g.planned)}</td><td class="num">${formatMoney(g.actual)}</td><td class="num">${formatMoney(g.planned + g.rows.reduce((t, r) => t + r.carried, 0) - g.actual)}</td></tr>
+${g.rows.map((r) => `<tr><td class="indent">${esc(r.name)}${r.carried !== 0 ? ` <span class="muted">(${formatMoney(r.carried, { plus: true })} carried over)</span>` : ""}</td><td class="num">${formatMoney(r.planned)}</td><td class="num">${formatMoney(r.actual)}</td><td class="num">${formatMoney(r.planned + r.carried - r.actual)}</td></tr>`).join("\n")}`,
     )
     .join("\n");
   return `<!doctype html>

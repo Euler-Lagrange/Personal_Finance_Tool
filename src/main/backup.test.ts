@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MIGRATION_COUNT, openDb } from "./db";
 import { createApi } from "./api";
-import { backupName, listBackups, pruneBackups, restoreBackup, writeBackup } from "./backup";
+import { backupName, listBackups, pruneBackups, pruneSafetyCopies, restoreBackup, writeBackup } from "./backup";
 
 let dir: string;
 beforeEach(() => {
@@ -73,5 +73,13 @@ describe("backup", () => {
     expect(left.some((b) => b.file === "finance-Desk-20261028-200000.db")).toBe(true);
     expect(left.some((b) => b.device === "Laptop")).toBe(true);
     expect(fs.existsSync(path.join(folder, "notes.txt"))).toBe(true);
+  });
+
+  it("keeps only the newest few safety copies and leaves every other file alone", () => {
+    const names = Array.from({ length: 11 }, (_, i) => `before-restore-202612${String(i + 10).padStart(2, "0")}-080000.db`);
+    for (const name of [...names, "finance.db", "local.json", "before-restore-notes.txt"]) fs.writeFileSync(path.join(dir, name), "x");
+    expect(pruneSafetyCopies(dir).sort()).toEqual(names.slice(0, 3));
+    expect(fs.readdirSync(dir).sort()).toEqual([...names.slice(3), "before-restore-notes.txt", "finance.db", "local.json"].sort());
+    expect(pruneSafetyCopies(dir)).toEqual([]);
   });
 });

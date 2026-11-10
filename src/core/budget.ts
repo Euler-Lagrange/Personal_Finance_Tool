@@ -9,6 +9,10 @@ export interface BudgetRow {
   archived: boolean;
   planned: Cents;
   actual: Cents;
+  /** Carried in from earlier months when the category rolls over: unused money is positive, overspending negative. */
+  carried: Cents;
+  /** Whether the category rolls over. */
+  rollover: boolean;
 }
 
 export interface GroupSummary {
@@ -26,8 +30,15 @@ export interface BudgetSummary {
   expenses: { planned: Cents; actual: Cents };
   /** Income received minus money spent or set aside, so far this month. */
   net: Cents;
-  /** Planned expenses not yet used. Negative when over plan. */
+  /** Planned expenses, plus what rolled over, not yet used. Negative when over plan. */
   leftToSpend: Cents;
+  /** The total that rolled over into this month across all categories. */
+  carried: Cents;
+}
+
+/** What a rollover category carries into a month: everything planned but unspent in the months before, less any overspending. */
+export function carryOver(history: { planned: Cents; actual: Cents }[]): Cents {
+  return history.reduce((t, m) => t + m.planned - m.actual, 0);
 }
 
 const sum = (rows: BudgetRow[], key: "planned" | "actual") => rows.reduce((t, r) => t + r[key], 0);
@@ -53,5 +64,6 @@ export function summarize(rows: BudgetRow[], groupOrder: string[]): BudgetSummar
     })
     .filter((g) => g.rows.length > 0 || groupOrder.includes(g.grp));
   const expenses = { planned: sum(expenseRows, "planned"), actual: sum(expenseRows, "actual") };
-  return { groups, income, expenses, net: income.actual - expenses.actual, leftToSpend: expenses.planned - expenses.actual };
+  const carried = expenseRows.reduce((t, r) => t + r.carried, 0);
+  return { groups, income, expenses, net: income.actual - expenses.actual, leftToSpend: expenses.planned + carried - expenses.actual, carried };
 }

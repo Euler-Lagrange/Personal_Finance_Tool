@@ -29,7 +29,8 @@ export interface Category {
   kind: "expense" | "income";
   sort: number;
   icon: string | null;
-  rollover: boolean;
+  /** The month from which what is unused or overspent carries into the next month. Null when rollover is off. */
+  rollover_from: string | null;
   archived: boolean;
 }
 

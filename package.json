@@ -15,6 +15,7 @@
     "check": "npm run typecheck && npm test",
     "shots": "npm run build && node scripts/shots.mjs",
     "smoke": "npm run build && node scripts/shots.mjs --smoke",
+    "closecheck": "npm run build && node scripts/close-check.mjs",
     "dist": "npm run build && electron-builder --win --publish never"
   },
   "build": {

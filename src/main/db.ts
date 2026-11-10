@@ -139,7 +139,12 @@ alter table funds add column category_id integer references categories(id);
 alter table funds add column emergency integer not null default 0;
 `;
 
-const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3];
+/** Rollover starts in the month it is switched on, so old months are not swept in after the fact. */
+const SCHEMA_V4 = `
+alter table categories add column rollover_from text;
+`;
+
+const MIGRATIONS: string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4];
 export const MIGRATION_COUNT = MIGRATIONS.length;
 
 export function openDb(path: string): Db {

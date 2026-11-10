@@ -164,7 +164,7 @@ describe("statement", () => {
     expect(s.purchases).toEqual([{ date: "2026-12-05", description: "Corner <Market>", total: 8000, share: 2400, paid_by: "b" }]);
     expect(s.settlements).toEqual([{ date: "2026-12-10", from: "b", amount: 2000 }]);
     const needs = s.budget.groups.find((g) => g.grp === "Needs")!;
-    expect(needs.rows.find((r) => r.name === "Groceries")).toEqual({ name: "Groceries", planned: 30000, actual: 2400 });
+    expect(needs.rows.find((r) => r.name === "Groceries")).toEqual({ name: "Groceries", planned: 30000, actual: 2400, carried: 0 });
 
     const html = statementHtml(s);
     expect(html).toContain("Sam: December 2026");

@@ -25,6 +25,8 @@ jobs:
       - run: npm test
       - name: Drive the real window (smoke test)
         run: npm run smoke
+      - name: Close the app as two PCs sharing a backup folder
+        run: npm run closecheck
 
   windows:
     name: Windows app
@@ -39,6 +41,8 @@ jobs:
       - run: npm test
       - name: Drive the real window (smoke test)
         run: npm run smoke
+      - name: Close the app as two PCs sharing a backup folder
+        run: npm run closecheck
       - name: Build installer and portable app
         run: npm run dist
         env:

@@ -104,9 +104,9 @@ The balance is one running number: what B owes on entries A paid, minus what A o
 | Hours what-if | Type hours, see the predicted paycheck | 5 (built) |
 | Export | Any month or year to Excel or CSV | 6 (built) |
 | Emergency fund runway | Months of Needs spending that savings would cover | 6 (built) |
-| Budget rollover | Per-category switch carrying unused or overspent money forward | 6 |
+| Budget rollover | Per-category switch carrying unused or overspent money forward, starting with the month it is switched on | 6 (built) |
 | Spending by merchant | Totals by store in the year view | 6 (built) |
-| Phone glance page | Read-only dashboard PDF saved to the backup folder on close | 6 |
+| Phone glance page | Read-only dashboard PDF, `finance-glance.pdf`, saved to the backup folder whenever a backup is written | 6 (built) |
 
 Declined: receipt photos. Undecided: tags.
 
@@ -114,7 +114,8 @@ Declined: receipt photos. Undecided: tags.
 
 - **Live data** is one SQLite file in the app-data folder. It never sits inside a synced folder, because syncing an open database can damage it.
 - **Backup:** on close, and every ten minutes while there are changes, a full copy is written to a chosen folder (meant to be inside OneDrive), named with the PC and time. The last 30 per PC plus one per month are kept. Any copy can be restored from Settings; the data it replaces is kept as a `before-restore` file.
-- **Switching PCs (milestone 6):** on launch, if the newest copy in the folder came from the other PC and is newer, load it and keep the local file as a backup. If both PCs changed since the last shared copy, ask once which to keep. Never merge.
+- **Switching PCs:** when the app opens, and when its window is returned to after a while, it looks for a newer copy from the other PC. It loads that copy by itself only when nothing can be lost: this PC has no changes of its own, and the copy was built on this PC's data (each data file records which backups it has taken in). When both PCs have changes the other lacks, it asks once which to keep. A fresh install pointed at the folder takes the newest copy there. The data replaced is always kept as a `before-restore` file. Never merge.
+- **Phone glance page:** a read-only PDF of the current month (left to spend for the household and each person, group bars, the balance between the two, bills due this week, next paychecks, fund balances, latest entries), shaped for a phone screen and saved beside the backups.
 - **Per-PC settings** (theme, backup folder, API key) live beside the data file, not in it.
 
 ## Stack
@@ -128,7 +129,7 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 | Table | Holds |
 | --- | --- |
 | `entries` | Date, description, full amount, kind, category, who paid, account, split, both shares, fund, source template, import batch, seen-in-bank tick, link to the purchase it was split from |
-| `categories` | Name, group, kind (expense or income), order, icon, rollover, archived |
+| `categories` | Name, group, kind (expense or income), order, icon, the month rollover starts from, archived |
 | `budget_lines` | Month, person, category, planned amount |
 | `months` | Month, person, starting balance |
 | `recurring` | Bill templates (monthly, with a due day) and renewals (every so many months, with a next date and an optional fund that pays) |
@@ -148,6 +149,6 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 3. **Screenshot import**, balance snapshots, missing-entries check.
 4. **Bills & Split:** recurring templates, statement. *Built.* The bills-went-out check follows milestone 3.
 5. **Pay calendar** and predictions. *Built, except the tax-rule prediction, which waits for pay stubs.* The paycheck-landed check follows milestone 3.
-6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC. *Built, except rollover, the phone glance page and automatic loading on the other PC.*
+6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC. *Built.*
 
 Each milestone is used on real data before the next begins. See [STATUS.md](STATUS.md).

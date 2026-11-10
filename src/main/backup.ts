@@ -90,5 +90,21 @@ export function restoreBackup(backupFile: string, dataFile: string, maxVersion: 
   const kept = path.join(path.dirname(dataFile), `before-restore-${stamp}.db`);
   if (fs.existsSync(dataFile)) fs.copyFileSync(dataFile, kept);
   fs.copyFileSync(backupFile, dataFile);
+  pruneSafetyCopies(path.dirname(dataFile));
   return kept;
+}
+
+/**
+ * Every restore, and every hand-off from the other PC, leaves a `before-restore` copy beside the
+ * data file. Only the newest few are kept, so they cannot pile up over years of switching PCs.
+ */
+export function pruneSafetyCopies(dir: string, keep = 8): string[] {
+  const old = fs
+    .readdirSync(dir)
+    .filter((f) => /^before-restore-\d{8}-\d{6}\.db$/.test(f))
+    .sort()
+    .reverse()
+    .slice(keep);
+  for (const file of old) fs.rmSync(path.join(dir, file), { force: true });
+  return old;
 }
