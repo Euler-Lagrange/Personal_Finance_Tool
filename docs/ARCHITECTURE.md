@@ -16,7 +16,7 @@ Personal details (names, pay rate, real bills and amounts) are deliberately abse
 | --- | --- | --- |
 | Dashboard | Summary tab | Left to spend, groups against targets, next paycheck, balance between the two people, bills due, fund balances, account balances with what is left, paste a screenshot |
 | Transactions | Transactions tab and the bill-splitting app | One searchable list, paste-to-import, a quick-add row |
-| Budget | Planned / Actual / Diff tables | Planned against actual per category for person A, person B or Household; Month / Year |
+| Budget | Planned / Actual / Diff tables | Planned against actual per category for person A, person B or Household; Month / Year, the whole year by month, export |
 | Bills & Split | Shared bills sheet and the bill-splitting app | Recurring bills with each share, running balance, Settle up, statement export |
 | Pay | Payroll calendar and the hours-to-pay table | Hours calendar, paychecks, predicted against real pay, paycheck plan, hours what-if, the year by payday |
 | Savings | Sinking fund rows and the renewals list | Fund balances and targets, emergency runway, renewals, per-paycheck set-aside |
@@ -89,7 +89,8 @@ The balance is one running number: what B owes on entries A paid, minus what A o
 - **Emergency runway:** funds ticked Emergency, measured in months of spending in the first group (Needs). The monthly figure is the average of up to three earlier months, or this month's plan until there is spending to go on.
 - **Renewals:** things that come round every so many months (12 for yearly). Each becomes an ordinary entry on its date and its next date moves on. A renewal can be paid from a fund. The screen shows each person's yearly share and what to set aside per month and per paycheck.
 - **Paycheck plan:** a renewal due before the next payday counts with the bills unless a fund pays for it. The month's planned amounts in the last group (Savings) are spread over the paychecks landing in that month and shown as Set aside.
-- **Year view** (not built yet): categories by month with totals and averages, plus hours and pay by month. Computed live.
+- **Year view:** on the Budget screen, a switch between the month and the whole year. Categories by month with a total and an average over the months that have entries; hours and pay by the month of the payday; and the largest totals by description ("Where it went"). Computed live, for either person or the household.
+- **Export:** a month (transactions and both budgets) or a year (transactions and a year table per view) as an Excel workbook, or the transactions as CSV. The workbook is written by a small built-in writer, with real dates and amounts.
 
 ## Approved extras
 
@@ -101,10 +102,10 @@ The balance is one running number: what B owes on entries A paid, minus what A o
 | Subscription flag | Points out a repeating charge not in the bills yet | 3 |
 | Bill change flag | Marks a bill whose amount moved from last month | 4 (built) |
 | Hours what-if | Type hours, see the predicted paycheck | 5 (built) |
-| Export | Any month or year to Excel or CSV | 6 |
+| Export | Any month or year to Excel or CSV | 6 (built) |
 | Emergency fund runway | Months of Needs spending that savings would cover | 6 (built) |
 | Budget rollover | Per-category switch carrying unused or overspent money forward | 6 |
-| Spending by merchant | Totals by store in the year view | 6 |
+| Spending by merchant | Totals by store in the year view | 6 (built) |
 | Phone glance page | Read-only dashboard PDF saved to the backup folder on close | 6 |
 
 Declined: receipt photos. Undecided: tags.
@@ -147,6 +148,6 @@ Thirteen tables. Money is whole cents. Balances, budget actuals, fund totals, th
 3. **Screenshot import**, balance snapshots, missing-entries check.
 4. **Bills & Split:** recurring templates, statement. *Built.* The bills-went-out check follows milestone 3.
 5. **Pay calendar** and predictions. *Built, except the tax-rule prediction, which waits for pay stubs.* The paycheck-landed check follows milestone 3.
-6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC. *Funds, the runway and renewals are built.*
+6. **Savings and year:** funds, renewals, year view, automatic loading on the other PC. *Built, except rollover, the phone glance page and automatic loading on the other PC.*
 
 Each milestone is used on real data before the next begins. See [STATUS.md](STATUS.md).

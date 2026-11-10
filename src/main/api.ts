@@ -1,7 +1,9 @@
 import { all, get, run, tx, type Db, type Row } from "./db";
 import { balance, balanceDelta, type BalanceEntry, type EntryKind } from "../core/balance";
 import { summarize, type BudgetRow } from "../core/budget";
-import { addDays, addMonths, daysInMonth, isISODate, isMonth, monthOf, toISO, weekday } from "../core/dates";
+import { addDays, addMonths, daysInMonth, isISODate, isMonth, monthLabel, monthOf, toISO, weekday } from "../core/dates";
+import type { ExportCell, ExportSheet } from "../core/csv";
+import { summarizeYear, type YearLine, type YearRow } from "../core/year";
 import { addMonthsToDate, evenShare, fundBalance, openingFor, runwayMonths, yearlyCost } from "../core/savings";
 import { fitPay, grossPay, hoursToGoal, isOutsideKnown, payPeriods, predictPaycheck, usBankHolidays, type PayPeriod } from "../core/pay";
 import type { StatementData, StatementLine } from "../core/statement";
@@ -9,7 +11,7 @@ import type { Cents } from "../core/money";
 import { computeShares, isValidSplit, MINE, THEIRS, type Person, type SplitSpec } from "../core/split";
 import type {
   BillInput, BillRow, Category, DayTag, Entry, EntryInput, EntryPatch, FundInput, FundRow, KnownPaycheck, PayMonth, PayProfile, PayProfileInput, PayRate,
-  PaySchedule, PaySetup, PaycheckPatch, PaycheckView, RenewalInput, RenewalList, RenewalRow, Runway, Settings, SetupFile, TemplateSplit, View,
+  PaySchedule, PaySetup, PaycheckPatch, PaycheckView, RenewalInput, RenewalList, RenewalRow, Runway, Settings, SetupFile, TemplateSplit, View, ExportRequest, YearView,
 } from "../shared/types";
 
 /** A message meant for the person using the app, shown next to the control that caused it. */
@@ -1489,6 +1491,123 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     writeSchedule(person, schedule);
   }
 
+  // ---- the year, and export ----------------------------------------------
+
+  const isYear = (y: string) => /^\d{4}$/.test(y);
+  const shareOf = (view: View) => (view === "hh" ? "a_cents + b_cents" : `${view}_cents`);
+
+  /** Every category's twelve months for one view, in the budget's order. Purchases paid from a fund are left out, as in the budget. */
+  function yearRows(year: string, view: View): { rows: YearRow[]; monthsWithData: number } {
+    const sums = all<{ category_id: number | null; kind: "expense" | "income"; m: string; t: number }>(
+      db,
+      `select category_id, kind, substr(date, 6, 2) m, sum(${shareOf(view)}) t from entries
+       where date like ? and kind in ('expense', 'income') and from_fund = 0 group by category_id, kind, m`,
+      `${year}-%`,
+    );
+    const categories = new Map(listCategories({ includeArchived: true }).map((c) => [c.id, c]));
+    const rows = new Map<string, YearRow>();
+    for (const s of sums) {
+      const c = s.category_id === null ? undefined : categories.get(s.category_id);
+      const key = c ? String(c.id) : `none:${s.kind}`;
+      if (!rows.has(key)) {
+        rows.set(key, { category_id: c?.id ?? 0, name: c?.name ?? "Uncategorized", grp: c?.grp ?? (s.kind === "income" ? "Income" : "Uncategorized"), kind: s.kind, monthly: Array.from({ length: 12 }, () => 0) });
+      }
+      rows.get(key)!.monthly[Number(s.m) - 1] += s.t;
+    }
+    const order = (r: YearRow) => categories.get(r.category_id)?.sort ?? Number.MAX_SAFE_INTEGER;
+    return {
+      rows: [...rows.values()].filter((r) => r.monthly.some((c) => c !== 0)).sort((x, y) => order(x) - order(y)),
+      monthsWithData: get<{ n: number }>(db, "select count(distinct substr(date, 1, 7)) n from entries where date like ?", `${year}-%`)!.n,
+    };
+  }
+
+  function getYear(args: { year: string; view: View }): YearView {
+    if (!isYear(args.year) || !["a", "b", "hh"].includes(args.view)) throw new UserError("That year is not valid");
+    const persons: Person[] = args.view === "hh" ? ["a", "b"] : [args.view];
+    const pay = persons.flatMap((person) => {
+      const profile = getPayProfile({ person });
+      if (!profile) return [];
+      const month = { hours: Array.from({ length: 12 }, () => 0), gross_cents: Array.from({ length: 12 }, () => 0), net_cents: Array.from({ length: 12 }, () => 0) };
+      for (const v of paycheckViews(profile, `${args.year}-01-01`, `${args.year}-12-31`, false)) {
+        if (!v.pay_date.startsWith(args.year)) continue;
+        const i = Number(v.pay_date.slice(5, 7)) - 1;
+        month.hours[i] += v.hours;
+        month.gross_cents[i] += v.actual_gross_cents ?? v.gross_cents;
+        month.net_cents[i] += takeHome(v);
+      }
+      return [{ person, ...month }];
+    });
+    const merchants = all<{ name: string; count: number; cents: number }>(
+      db,
+      `select max(description) name, count(*) count, sum(${shareOf(args.view)}) cents from entries
+       where date like ? and kind = 'expense' group by lower(trim(description)) having cents <> 0 order by cents desc, name limit 25`,
+      `${args.year}-%`,
+    );
+    return { year: args.year, ...yearRows(args.year, args.view), pay, merchants };
+  }
+
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  /** A month or a year as plain tables, ready to be written as a spreadsheet. */
+  function exportTables(args: ExportRequest): { title: string; sheets: ExportSheet[] } {
+    if (!isMonth(args.month) || (args.scope !== "month" && args.scope !== "year")) throw new UserError("That export is not valid");
+    const { people, groups } = getSettings();
+    const year = args.month.slice(0, 4);
+    const categories = new Map(listCategories({ includeArchived: true }).map((c) => [c.id, c]));
+    const fundNames = new Map(all<{ id: number; name: string }>(db, "select id, name from funds").map((f) => [f.id, f.name]));
+    const money = (cents: Cents): ExportCell => ({ money: cents });
+    const entries = all<Row>(db, `${ENTRY_SELECT} where e.date like ? order by e.date, e.id`, args.scope === "month" ? `${args.month}-%` : `${year}-%`).map(toEntry);
+    const transactions: ExportCell[][] = [
+      ["Date", "Description", "Category", "Group", "Kind", "Amount", "Paid by", `${people.a} share`, `${people.b} share`, "Paid from", "Account", "Note"],
+      ...entries.map((e): ExportCell[] => [
+        { date: e.date },
+        e.description,
+        e.kind === "settlement" ? "" : (e.category_name ?? "Uncategorized"),
+        e.category_id === null ? "" : (categories.get(e.category_id)?.grp ?? ""),
+        e.kind === "expense" ? "Expense" : e.kind === "income" ? "Income" : "Settlement",
+        money(e.amount_cents),
+        people[e.paid_by],
+        money(e.a_cents),
+        money(e.b_cents),
+        e.from_fund ? (fundNames.get(e.fund_id ?? 0) ?? "A fund") : "",
+        e.account ?? "",
+        e.note ?? "",
+      ]),
+    ];
+    if (args.scope === "month") {
+      const a = getBudget({ month: args.month, view: "a" }).rows;
+      const b = new Map(getBudget({ month: args.month, view: "b" }).rows.map((r) => [`${r.category_id}:${r.kind}`, r]));
+      const budget: ExportCell[][] = [
+        ["Group", "Category", `${people.a} planned`, `${people.a} actual`, `${people.b} planned`, `${people.b} actual`, "Household planned", "Household actual"],
+        ...a.map((r): ExportCell[] => {
+          const other = b.get(`${r.category_id}:${r.kind}`);
+          return [r.grp, r.name, money(r.planned), money(r.actual), money(other?.planned ?? 0), money(other?.actual ?? 0), money(r.planned + (other?.planned ?? 0)), money(r.actual + (other?.actual ?? 0))];
+        }),
+      ];
+      return { title: `Household finance ${monthLabel(args.month)}`, sheets: [{ name: "Transactions", rows: transactions }, { name: "Budget", rows: budget }] };
+    }
+    const yearSheet = (view: View, name: string): ExportSheet => {
+      const { rows, monthsWithData } = yearRows(year, view);
+      const s = summarizeYear(rows, groups, monthsWithData);
+      const cells = (group: string, label: string, l: YearLine): ExportCell[] => [group, label, ...l.monthly.map(money), money(l.total), money(l.average)];
+      return {
+        name,
+        rows: [
+          ["Group", "Category", ...MONTH_NAMES, "Total", "Average"],
+          ...s.groups.flatMap((g) => [...g.rows.map((r) => cells(g.grp, r.name, r)), cells(g.grp, "Total", g)]),
+          cells("Spending", "Total", s.expenses),
+          ...s.income.rows.map((r) => cells("Income", r.name, r)),
+          cells("Income", "Total", s.income),
+          cells("Net", "Income minus spending", s.net),
+        ],
+      };
+    };
+    return {
+      title: `Household finance ${year}`,
+      sheets: [{ name: "Transactions", rows: transactions }, yearSheet("hh", "Year Household"), yearSheet("a", `Year ${people.a}`), yearSheet("b", `Year ${people.b}`)],
+    };
+  }
+
   // ---- statement ----------------------------------------------------------
 
   /** One person's month: shared bills and purchases, settlements, the balance, and their budget. */
@@ -1623,6 +1742,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     "bills.generate": generateBills,
     "bills.remove": removeBill,
     "statement.data": statementData,
+    "year.get": getYear,
+    "export.tables": exportTables,
     "funds.list": listFunds,
     "funds.create": createFund,
     "funds.update": updateFund,

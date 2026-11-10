@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and the first part of 6 (funds, runway, renewals) are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet. Milestone 3 waits for sample screenshots; the tax-rule pay prediction waits for two pay stubs.
+Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and most of 6 (funds, runway, renewals, year view, export) are built and checked on Linux and on GitHub's Windows runner. Nothing has been run by hand on the owner's PC yet. Milestone 3 waits for sample screenshots; the tax-rule pay prediction waits for two pay stubs.
 
 ## Built
 
@@ -53,16 +53,24 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and the first part of 6 (funds
 - Pay: renewals count among the bills before the next payday, and a Set aside column spreads the month's planned savings over its paychecks.
 - Fund balances on the dashboard.
 
+**Milestone 6, second part: the year**
+
+- Budget screen: a switch between the month and the whole year. The year shows every category by month with a total and an average, for either person or the household.
+- Hours and pay by the month of the payday.
+- Approved extra: spending by merchant ("Where it went"), the 25 largest totals by description.
+- Approved extra: export. A month or a year to an Excel workbook, or the transactions to CSV, from the Transactions screen; the year view has its own Export button.
+
 ## Checked, and how
 
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Clean |
-| `npm test` (96 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals, bill creation and month roll-over, every kind of bill split, the change flag, switching off and deleting bills, the statement's figures and wording, pay periods for both schedules, bank holidays, paydays moved off holidays, hours and sick time, rates and raises, predictions and their limits, the no-benefits extra, usual hours, paychecks stored only when typed on, dates changed by hand, a changed schedule, the paycheck plan against bills, planned income, the year totals, a fixed paycheck, pay in a setup file, fund balances from what is set aside and paid out, truing up, re-pointing and archiving a fund, purchases paid from a fund staying out of the budget and the balance, the runway from plan and from spending, renewals becoming entries and catching up, renewals paid from a fund, and renewals and savings in the paycheck plan |
-| `npm run smoke` (26 steps in the real window) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, adds a bill, ticks Paid and changes its amount, types hours and a sick tag in the calendar, types a real take-home and undoes it, the what-if, plans income from paychecks, corrects the rate in Pay settings, the fixed-paycheck view, adds a fund and trues it up, pays a purchase from it, adds a renewal that falls due, writes the statement PDF, backup folder, Restore, refused folder; the stored data is checked after each step |
+| `npm test` (107 unit tests) | All pass. Covers amount parsing, split rounding and refunds, shares always adding up, balance, both budgets and Household, month copy-forward, undo of add / edit / delete / split, categories and groups, setup import, backup write / restore / prune and their refusals, bill creation and month roll-over, every kind of bill split, the change flag, switching off and deleting bills, the statement's figures and wording, pay periods for both schedules, bank holidays, paydays moved off holidays, hours and sick time, rates and raises, predictions and their limits, the no-benefits extra, usual hours, paychecks stored only when typed on, dates changed by hand, a changed schedule, the paycheck plan against bills, planned income, the year totals, a fixed paycheck, pay in a setup file, fund balances from what is set aside and paid out, truing up, re-pointing and archiving a fund, purchases paid from a fund staying out of the budget and the balance, the runway from plan and from spending, renewals becoming entries and catching up, renewals paid from a fund, renewals and savings in the paycheck plan, the year view per person and household, merchant totals, pay by month, the export tables adding up, the Excel writer (zip read back byte for byte, typed cells, safe text) and CSV quoting |
+| `npm run smoke` (28 steps in the real window) | All pass. Types into quick-add, edits cells in place, Undo button, bulk delete, Ctrl+Z, planned amount, theme, Settle up, adds a bill, ticks Paid and changes its amount, types hours and a sick tag in the calendar, types a real take-home and undoes it, the what-if, plans income from paychecks, corrects the rate in Pay settings, the fixed-paycheck view, adds a fund and trues it up, pays a purchase from it, adds a renewal that falls due, opens the year view, exports a year to Excel and a month to CSV, writes the statement PDF, backup folder, Restore, refused folder; the stored data is checked after each step |
 | `npm run shots` | Every screen reviewed in Slate and Marshmallow, including Pay with its settings open and the fixed-paycheck view |
 | Pay against real numbers | The owner's private setup file loads. On his 21 known paychecks the prediction misses by 0.65% on average, and its 80-hour figure is within 0.2% of the one in his spreadsheet. His real numbers stay out of this repository |
 | Statement PDF | Opened and read: two pages, totals add up, the balance sentence matches the app |
+| Excel export | Opened with a separate spreadsheet library (openpyxl): four sheets, real dates and amounts, bold frozen heading row, and each group's total equals the sum of its rows. Not yet opened in Excel itself |
 | Backup on close | Confirmed: file written, integrity check ok, all rows present |
 | `npm run dev` | Starts and renders |
 | GitHub Actions, Linux | Type check, unit tests and smoke test pass |
@@ -93,6 +101,7 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and the first part of 6 (funds
 - **Native dialogs.** The folder chooser, setup-file picker and the statement's Save dialog are not driven by the smoke test. The logic behind them is.
 - **OneDrive.** That backup copies sync to a second PC.
 - **The installer.** Install, upgrade and uninstall.
+- **Excel itself.** The exported workbook was read back by a spreadsheet library, not opened in Excel.
 
 ## Small gaps against the design so far
 
@@ -113,10 +122,10 @@ Last updated 2026-11-09. Milestones 1, 2, 4 and 5 and the first part of 6 (funds
 
 The rest of milestone 6 needs nothing from the owner. Milestone 3 starts when sample screenshots arrive.
 
-**Milestone 6, the rest: the year**
+**Milestone 6, the rest**
 
-1. Year view: categories by month with totals and averages, plus hours and pay by month.
-2. Approved extras: export to Excel or CSV, budget rollover, spending by merchant, phone glance page.
+1. Approved extra: budget rollover, a per-category switch that carries unused or overspent money forward from the month it is switched on.
+2. Approved extra: phone glance page, a read-only dashboard PDF saved to the backup folder on close.
 3. Load the newest backup automatically when the other PC opens the app.
 
 **Milestone 3: screenshot import**

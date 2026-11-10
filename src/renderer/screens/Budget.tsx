@@ -3,15 +3,38 @@ import { Plus, X } from "lucide-react";
 import { change, toast, useQuery } from "../api";
 import type { ScreenProps } from "../App";
 import { summarize, type BudgetRow } from "../../core/budget";
+import { monthLabel } from "../../core/dates";
 import { formatMoney } from "../../core/money";
 import type { Person } from "../../core/split";
 import { CategoryIcon } from "../components/Icon";
-import { AmountInput, Bar, Card, Money, TextCell } from "../components/ui";
+import { AmountInput, Bar, Card, Money, Segmented, TextCell } from "../components/ui";
+import { YearView } from "./Year";
 
 export function Budget({ month, view, settings }: ScreenProps) {
   const budget = useQuery("budget.get", { month, view });
   const [forward, setForward] = useState(false);
+  const [mode, setMode] = useState<"month" | "year">("month");
   if (!budget) return null;
+  const modeSwitch = (
+    <div className="toolbar">
+      <Segmented
+        ariaLabel="Month or year"
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: "month", label: monthLabel(month) },
+          { value: "year", label: `All of ${month.slice(0, 4)}` },
+        ]}
+      />
+    </div>
+  );
+  if (mode === "year")
+    return (
+      <div className="stack">
+        {modeSwitch}
+        <YearView month={month} view={view} settings={settings} />
+      </div>
+    );
   const s = summarize(budget.rows, settings.groups);
   const person: Person | null = view === "hh" ? null : view;
   const end = budget.startBalanceCents + s.net;
@@ -91,6 +114,7 @@ export function Budget({ month, view, settings }: ScreenProps) {
 
   return (
     <div className="stack">
+      {modeSwitch}
       <div className="grid stats">
         <Card title="Income">
           <p className="stat">{formatMoney(s.income.actual)}</p>

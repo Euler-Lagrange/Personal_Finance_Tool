@@ -5,6 +5,9 @@ import { createApi, UserError, type CoreApi } from "./api";
 import { listBackups, pruneBackups, restoreBackup, writeBackup } from "./backup";
 import { MIGRATION_COUNT, openDb, type Db } from "./db";
 import { loadDemo } from "./demo";
+import { toXlsx } from "./export";
+import { toCsv } from "../core/csv";
+import type { ExportRequest } from "../shared/types";
 import { runSmoke, takeShots } from "./devtools";
 import { readLocal, writeLocal } from "./local";
 import { monthLabel } from "../core/dates";
@@ -66,6 +69,13 @@ function setBackupFolder(folder: string): string {
 }
 
 /** Renders one person's statement for a month and writes it as a PDF. */
+/** Writes a month or year as an Excel workbook, or its transactions as CSV (with a mark so Excel reads accents correctly). */
+function writeExport(args: ExportRequest & { format: "xlsx" | "csv" }, file: string): string {
+  const { sheets } = core["export.tables"](args);
+  fs.writeFileSync(file, args.format === "xlsx" ? toXlsx(sheets) : `\ufeff${toCsv(sheets[0].rows)}`);
+  return file;
+}
+
 async function writeStatement(month: string, person: Person, file: string): Promise<string> {
   const html = statementHtml(core["statement.data"]({ month, person }));
   const page = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
@@ -149,6 +159,24 @@ function createShellApi() {
     "statement.write": (args: { month: string; person: Person; file: string }): Promise<string> => {
       if (!process.env.FINANCE_SMOKE) throw new UserError("Use Save PDF to choose where the statement goes");
       return writeStatement(args.month, args.person, args.file);
+    },
+
+    "export.save": async (args: ExportRequest & { format: "xlsx" | "csv" }): Promise<string | null> => {
+      const { title } = core["export.tables"](args);
+      const config = local() as { exportFolder?: string };
+      const result = await dialog.showSaveDialog(win!, {
+        title: "Save the export",
+        defaultPath: path.join(config.exportFolder ?? app.getPath("documents"), `${title}.${args.format}`),
+        filters: [args.format === "xlsx" ? { name: "Excel workbook", extensions: ["xlsx"] } : { name: "Comma-separated values", extensions: ["csv"] }],
+      });
+      if (result.canceled || !result.filePath) return null;
+      saveLocal({ exportFolder: path.dirname(result.filePath) });
+      return writeExport(args, result.filePath);
+    },
+    // Used by the smoke test only: a screen never chooses where a file is written.
+    "export.write": (args: ExportRequest & { format: "xlsx" | "csv"; file: string }): string => {
+      if (!process.env.FINANCE_SMOKE) throw new UserError("Use Export to choose where the file goes");
+      return writeExport(args, args.file);
     },
 
     "setup.chooseAndImport": async (): Promise<{ categories: number; budgetLines: number } | null> => {

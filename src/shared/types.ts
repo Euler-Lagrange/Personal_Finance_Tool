@@ -1,6 +1,7 @@
 import type { Cents } from "../core/money";
 import type { Person, SplitSpec } from "../core/split";
 import type { EntryKind } from "../core/balance";
+import type { YearRow } from "../core/year";
 
 export type View = Person | "hh";
 
@@ -338,4 +339,23 @@ export interface RenewalList {
   yearly_cents: Record<Person, Cents>;
   /** Paychecks in a year, from each person's pay schedule. Null until their pay is set up. */
   checksPerYear: Record<Person, number | null>;
+}
+
+// ---- the year ------------------------------------------------------------------
+
+export interface YearView {
+  year: string;
+  /** Months of the year that have any entries. Averages are over these. */
+  monthsWithData: number;
+  rows: YearRow[];
+  /** Hours and pay by the month of the payday, for each person on screen whose pay is set up. */
+  pay: { person: Person; hours: number[]; gross_cents: Cents[]; net_cents: Cents[] }[];
+  /** Where the money went: the largest totals by description. */
+  merchants: { name: string; count: number; cents: Cents }[];
+}
+
+export interface ExportRequest {
+  scope: "month" | "year";
+  /** The month on screen. A year export covers the year this month is in. */
+  month: string;
 }

@@ -1,14 +1,15 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Columns3, Plus, Scissors, Search, Trash2 } from "lucide-react";
+import { Columns3, Plus, Scissors, Search, Trash2, FileDown } from "lucide-react";
 import { change, toast, useQuery } from "../api";
 import type { ScreenProps } from "../App";
 import type { EntryKind } from "../../core/balance";
-import { monthOf, toISO } from "../../core/dates";
+import { monthOf, toISO, monthLabel } from "../../core/dates";
 import { formatMoney, parseMoney } from "../../core/money";
 import type { Person, SplitSpec } from "../../core/split";
 import type { Category, Entry, EntryPatch, FundRow } from "../../shared/types";
 import { AmountInput, Segmented, SplitSelect, TextCell } from "../components/ui";
 import { FundSelect } from "./Savings";
+import { saveExport } from "./Year";
 
 const OPTIONAL_COLUMNS = [
   { id: "paid_by", label: "Paid by" },
@@ -41,6 +42,7 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
   const [splitting, setSplitting] = useState<number | null>(null);
   const [columns, setColumns] = useState<ColumnId[]>(loadColumns);
   const [showColumns, setShowColumns] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -94,7 +96,24 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
           {fundTotal !== 0 ? ` · ${formatMoney(fundTotal)} paid from funds` : ""}
         </span>
         <div className="menu-wrap">
-          <button type="button" className="btn ghost" aria-expanded={showColumns} onClick={() => setShowColumns(!showColumns)}>
+          <button type="button" className="btn ghost" aria-expanded={showExport} onClick={() => (setShowExport(!showExport), setShowColumns(false))}>
+            <FileDown size={15} aria-hidden="true" />
+            Export
+          </button>
+          {showExport && (
+            <div className="menu export-menu">
+              {(["month", "year"] as const).flatMap((scope) =>
+                (["xlsx", "csv"] as const).map((format) => (
+                  <button key={scope + format} type="button" className="btn ghost" onClick={() => (setShowExport(false), void saveExport({ scope, month }, format))}>
+                    {scope === "month" ? monthLabel(month) : `All of ${month.slice(0, 4)}`} to {format === "xlsx" ? "Excel" : "CSV"}
+                  </button>
+                )),
+              )}
+            </div>
+          )}
+        </div>
+        <div className="menu-wrap next">
+          <button type="button" className="btn ghost" aria-expanded={showColumns} onClick={() => (setShowColumns(!showColumns), setShowExport(false))}>
             <Columns3 size={15} aria-hidden="true" />
             Columns
           </button>

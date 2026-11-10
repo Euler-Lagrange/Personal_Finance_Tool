@@ -6,6 +6,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Pictures of a screen in a second state: the screen's route, a dash, then a name. */
 const VARIANTS: Record<string, string> = {
+  "budget-year": `[...document.querySelectorAll(".toolbar .segmented button")].find((b) => b.textContent.trim().startsWith("All of")).click()`,
   "pay-settings": `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Pay settings").click()`,
   "pay-fixed": `[...document.querySelectorAll(".toolbar .segmented button")][1].click()`,
 };
@@ -13,7 +14,7 @@ const VARIANTS: Record<string, string> = {
 /** Dev helper: visit each screen, save a picture of it, then quit. */
 export async function takeShots(win: BrowserWindow, dir: string): Promise<void> {
   fs.mkdirSync(dir, { recursive: true });
-  const routes = (process.env.FINANCE_SHOT_ROUTES ?? "dashboard,transactions,budget,split,pay,pay-settings,pay-fixed,savings,settings").split(",");
+  const routes = (process.env.FINANCE_SHOT_ROUTES ?? "dashboard,transactions,budget,budget-year,split,pay,pay-settings,pay-fixed,savings,settings").split(",");
   await wait(1200);
   for (const route of routes) {
     await win.webContents.executeJavaScript(`location.hash = "#/${route.split("-")[0]}"`);
@@ -182,6 +183,26 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
       renewed?.next_date === `${Number(todayISO.slice(0, 4)) + 1}${todayISO.slice(4)}` && renewalEntry?.amount_cents === 12000,
       [renewed, renewalEntry],
     );
+
+    // ---- the year and export ----
+    await page(`location.hash = "#/budget"; await sleep(700);
+      [...document.querySelectorAll(".toolbar .segmented button")].find((b) => b.textContent.trim().startsWith("All of")).click(); await sleep(800);`);
+    const yearTable = await page<{ heads: number; rows: number; merchants: number }>(
+      `return { heads: document.querySelectorAll("table.year thead tr")[0]?.children.length ?? 0, rows: document.querySelectorAll("table.year tbody tr").length, merchants: document.querySelectorAll(".merchants li").length };`,
+    );
+    check("the year view shows twelve months, a total and an average per category", yearTable.heads === 15 && yearTable.rows > 5 && yearTable.merchants > 3, yearTable);
+    const workbook = path.join(path.dirname(reportFile), "export.xlsx");
+    const csvFile = path.join(path.dirname(reportFile), "export.csv");
+    await page(`await rpc("export.write", { scope: "year", month: "${todayISO.slice(0, 7)}", format: "xlsx", file: ${JSON.stringify(workbook)} });
+      await rpc("export.write", { scope: "month", month: "${todayISO.slice(0, 7)}", format: "csv", file: ${JSON.stringify(csvFile)} });`);
+    const xlsxBytes = fs.existsSync(workbook) ? fs.readFileSync(workbook) : Buffer.alloc(0);
+    const csvText = fs.existsSync(csvFile) ? fs.readFileSync(csvFile, "utf8") : "";
+    check(
+      "a year exports to an Excel workbook and a month to CSV",
+      xlsxBytes.subarray(0, 2).toString() === "PK" && xlsxBytes.length > 3000 && csvText.startsWith("\ufeffDate,Description,Category") && csvText.includes("Smoke test market"),
+      [xlsxBytes.length, csvText.slice(0, 60)],
+    );
+    if (process.env.FINANCE_SMOKE_KEEP_XLSX) fs.copyFileSync(workbook, process.env.FINANCE_SMOKE_KEEP_XLSX);
 
     const pdf = path.join(path.dirname(reportFile), "statement.pdf");
     await page(`await rpc("statement.write", { month: "${todayISO.slice(0, 7)}", person: "b", file: ${JSON.stringify(pdf)} });`);
