@@ -1,6 +1,6 @@
 import { all, get, run, tx, type Db, type Row } from "./db";
 import { balance, balanceDelta, type BalanceEntry, type EntryKind } from "../core/balance";
-import { carryOver, summarize, type BudgetRow } from "../core/budget";
+import { carryOver, splitHouseholdPlan, summarize, type BudgetRow } from "../core/budget";
 import { addDays, addMonths, daysInMonth, isISODate, isMonth, monthLabel, monthOf, toISO, weekday } from "../core/dates";
 import type { ExportCell, ExportSheet } from "../core/csv";
 import type { GlanceData } from "../core/glance";
@@ -279,8 +279,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
       if (to !== args.from && settings.groups.includes(to)) throw new UserError(`"${to}" already exists`);
       for (const c of all<Row>(db, "select id from categories where grp = ?", args.from)) record("categories", { id: c.id });
       run(db, "update categories set grp = ? where grp = ?", to, args.from);
-      const targets = { a: { ...settings.targets.a }, b: { ...settings.targets.b } };
-      for (const p of ["a", "b"] as const) {
+      const targets = { a: { ...settings.targets.a }, b: { ...settings.targets.b }, hh: { ...settings.targets.hh } };
+      for (const p of ["a", "b", "hh"] as const) {
         if (args.from in targets[p]) {
           targets[p][to] = targets[p][args.from];
           if (to !== args.from) delete targets[p][args.from];
@@ -577,27 +577,54 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     return { rows, startBalanceCents: start ?? 0 };
   }
 
+  function checkPlanned(args: { month: string; category_id: number; planned_cents: Cents }) {
+    if (!isMonth(args.month)) throw new UserError("That budget line is not valid");
+    if (!Number.isInteger(args.planned_cents) || args.planned_cents < 0) throw new UserError("Enter a planned amount of zero or more");
+    if (!readRow("categories", { id: args.category_id })) throw new UserError("That category no longer exists");
+  }
+  /** Writes one person's planned amount for a month and, when asked, for every later month that has a plan. */
+  function writePlanned(person: Person, args: { month: string; category_id: number; forward?: boolean }, cents: Cents) {
+    const months = [args.month];
+    if (args.forward) months.push(...all<{ month: string }>(db, "select distinct month from budget_lines where person = ? and month > ?", person, args.month).map((r) => r.month));
+    for (const month of months) {
+      record("budget_lines", { month, person, category_id: args.category_id });
+      run(
+        db,
+        `insert into budget_lines (month, person, category_id, planned_cents) values (?, ?, ?, ?)
+         on conflict (month, person, category_id) do update set planned_cents = excluded.planned_cents`,
+        month, person, args.category_id, cents,
+      );
+    }
+  }
+
   function setPlanned(args: { month: string; person: Person; category_id: number; planned_cents: Cents; forward?: boolean }): void {
     mutate("Change planned amount", () => {
-      if (!isMonth(args.month) || !isPerson(args.person)) throw new UserError("That budget line is not valid");
-      if (!Number.isInteger(args.planned_cents) || args.planned_cents < 0) throw new UserError("Enter a planned amount of zero or more");
-      if (!readRow("categories", { id: args.category_id })) throw new UserError("That category no longer exists");
-      const months = [args.month];
-      if (args.forward) {
-        months.push(
-          ...all<{ month: string }>(db, "select distinct month from budget_lines where person = ? and month > ?", args.person, args.month).map((r) => r.month),
-        );
-      }
-      for (const month of months) {
-        record("budget_lines", { month, person: args.person, category_id: args.category_id });
-        run(
-          db,
-          `insert into budget_lines (month, person, category_id, planned_cents) values (?, ?, ?, ?)
-           on conflict (month, person, category_id) do update set planned_cents = excluded.planned_cents`,
-          month, args.person, args.category_id, args.planned_cents,
-        );
-      }
+      if (!isPerson(args.person)) throw new UserError("That budget line is not valid");
+      checkPlanned(args);
+      writePlanned(args.person, args, args.planned_cents);
     });
+  }
+
+  /**
+   * Merged finances: one planned amount for the household. It is kept as two parts in the proportion
+   * the two plans already had, so each person still has a plan if finances are un-merged later.
+   */
+  function setHouseholdPlanned(args: { month: string; category_id: number; planned_cents: Cents; forward?: boolean }): void {
+    mutate("Change planned amount", () => {
+      checkPlanned(args);
+      const planned = (person: Person) =>
+        get<{ p: number }>(db, "select planned_cents p from budget_lines where month = ? and person = ? and category_id = ?", args.month, person, args.category_id)?.p ?? 0;
+      const parts = splitHouseholdPlan(args.planned_cents, planned("a"), planned("b"));
+      writePlanned("a", args, parts.a);
+      writePlanned("b", args, parts.b);
+    });
+  }
+
+  /** Merged finances: one starting balance. B's part stays as it was and A's takes up the difference. */
+  function setHouseholdStartBalance(args: { month: string; cents: Cents }): void {
+    if (!isMonth(args.month) || !Number.isInteger(args.cents)) throw new UserError("That starting balance is not valid");
+    const b = get<{ s: number }>(db, "select start_balance_cents s from months where month = ? and person = 'b'", args.month)?.s ?? 0;
+    setStartBalance({ month: args.month, person: "a", cents: args.cents - b });
   }
 
   function setStartBalance(args: { month: string; person: Person; cents: Cents }): void {
@@ -1658,8 +1685,9 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
       asOf: (opts.now ? opts.now() : new Date()).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
       month,
       names: people,
-      views: [view("hh", "Household"), view("a", people.a), view("b", people.b)],
-      balance: getBalance().cents,
+      // With merged finances there is one budget and nothing owed between the two people.
+      views: getSettings().mergedFinances ? [view("hh", "Household")] : [view("hh", "Household"), view("a", people.a), view("b", people.b)],
+      balance: getSettings().mergedFinances ? null : getBalance().cents,
       billsDue: listBills({ month, today: day })
         .rows.filter((r) => r.active && r.entry && !r.entry.seen_in_bank && r.entry.date >= day && r.entry.date <= until)
         .map((r) => ({ name: r.name, date: r.entry!.date, cents: r.entry!.amount_cents })),
@@ -1835,6 +1863,8 @@ export function createApi(db: Db, opts: { now?: () => Date } = {}) {
     "pay.planIncome": planPayIncome,
     "budget.get": getBudget,
     "budget.setPlanned": setPlanned,
+    "budget.setHouseholdPlanned": setHouseholdPlanned,
+    "budget.setHouseholdStartBalance": setHouseholdStartBalance,
     "budget.setStartBalance": setStartBalance,
     "balance.get": getBalance,
     "setup.import": importSetup,

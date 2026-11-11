@@ -248,7 +248,9 @@ function Renewals({ settings, categories, funds }: Props & { funds: FundRow[] })
     if ((await change("renewals.remove", { id: r.id })) !== undefined) toast(`${r.name} deleted. Its past entries are kept. Ctrl+Z brings it back.`);
   };
   const liveFunds = funds.filter((f) => !f.archived);
-  const people = (["a", "b"] as Person[]).filter((p) => data.yearly_cents[p] > 0);
+  const merged = settings.mergedFinances;
+  const people = merged ? [] : (["a", "b"] as Person[]).filter((p) => data.yearly_cents[p] > 0);
+  const yearly = data.yearly_cents.a + data.yearly_cents.b;
 
   return (
     <Card title="Renewals" action={active.length > 0 ? <span className="muted">{formatMoney(data.yearly_cents.a + data.yearly_cents.b)} a year</span> : undefined}>
@@ -259,6 +261,11 @@ function Renewals({ settings, categories, funds }: Props & { funds: FundRow[] })
       ) : (
         <>
           <ul className="plain set-aside">
+            {merged && (
+              <li>
+                A year of renewals costs {formatMoney(yearly)}: set aside <strong className="money">{formatMoney(perPeriod(yearly, 12))}</strong> a month.
+              </li>
+            )}
             {people.map((p) => (
               <li key={p}>
                 <strong>{settings.people[p]}</strong> needs {formatMoney(data.yearly_cents[p])} a year: set aside <strong className="money">{formatMoney(perPeriod(data.yearly_cents[p], 12))}</strong> a month
@@ -281,7 +288,7 @@ function Renewals({ settings, categories, funds }: Props & { funds: FundRow[] })
                   <th>Next</th>
                   <th className="num">Cost</th>
                   <th>Paid by</th>
-                  <th>Split</th>
+                  {!merged && <th>Split</th>}
                   {liveFunds.length > 0 && <th title="A renewal paid from a fund draws the fund down and stays out of the month's budget">Paid from</th>}
                   <th aria-label="Actions" />
                 </tr>
@@ -323,9 +330,11 @@ function Renewals({ settings, categories, funds }: Props & { funds: FundRow[] })
                         <option value="b">{settings.people.b}</option>
                       </select>
                     </td>
-                    <td>
-                      <BillSplit value={r.split} settings={settings} onChange={(split) => update(r, { split })} />
-                    </td>
+                    {!merged && (
+                      <td>
+                        <BillSplit value={r.split} settings={settings} onChange={(split) => update(r, { split })} />
+                      </td>
+                    )}
                     {liveFunds.length > 0 && (
                       <td>
                         <FundSelect className="cell" funds={funds} value={r.fund_id} ariaLabel={`What pays for ${r.name}`} onChange={(fund_id) => update(r, { fund_id })} />
@@ -444,10 +453,12 @@ function AddRenewal({ settings, categories, funds, today }: { settings: Props["s
             <option value="b">{settings.people.b}</option>
           </select>
         </label>
-        <label>
-          <span>Split</span>
-          <BillSplit value={split} settings={settings} onChange={setSplit} />
-        </label>
+        {!settings.mergedFinances && (
+          <label>
+            <span>Split</span>
+            <BillSplit value={split} settings={settings} onChange={setSplit} />
+          </label>
+        )}
         {funds.length > 0 && (
           <label>
             <span>Paid from</span>

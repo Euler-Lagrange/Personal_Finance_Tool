@@ -39,8 +39,12 @@ export function Budget({ month, view, settings }: ScreenProps) {
   const person: Person | null = view === "hh" ? null : view;
   const end = budget.startBalanceCents + s.net;
 
+  const merged = settings.mergedFinances;
+  // Planned amounts belong to a person, or to the household once finances are merged.
+  const canPlan = person !== null || merged;
   const setPlanned = (row: BudgetRow, planned_cents: number) => {
     if (person) void change("budget.setPlanned", { month, person, category_id: row.category_id, planned_cents, forward });
+    else if (merged) void change("budget.setHouseholdPlanned", { month, category_id: row.category_id, planned_cents, forward });
   };
   const rename = (row: BudgetRow, name: string) => void change("categories.update", { id: row.category_id, patch: { name } });
   const remove = async (row: BudgetRow) => {
@@ -80,7 +84,7 @@ export function Budget({ month, view, settings }: ScreenProps) {
                 </span>
               </td>
               <td className="num">
-                {person && !fixed ? (
+                {canPlan && !fixed ? (
                   <AmountInput cents={r.planned} allowZero ariaLabel={`Planned for ${r.name}`} onCommit={(c) => setPlanned(r, c)} />
                 ) : (
                   formatMoney(r.planned)
@@ -152,8 +156,13 @@ export function Budget({ month, view, settings }: ScreenProps) {
           <p className="stat">{formatMoney(end)}</p>
           <p className="stat-line">
             Started at
-            {person ? (
-              <AmountInput cents={budget.startBalanceCents} allowZero ariaLabel="Starting balance" onCommit={(cents) => void change("budget.setStartBalance", { month, person, cents })} />
+            {canPlan ? (
+              <AmountInput
+                cents={budget.startBalanceCents}
+                allowZero
+                ariaLabel="Starting balance"
+                onCommit={(cents) => void (person ? change("budget.setStartBalance", { month, person, cents }) : change("budget.setHouseholdStartBalance", { month, cents }))}
+              />
             ) : (
               ` ${formatMoney(budget.startBalanceCents)}`
             )}
@@ -161,7 +170,7 @@ export function Budget({ month, view, settings }: ScreenProps) {
         </Card>
       </div>
 
-      {person ? (
+      {canPlan ? (
         <label className="check-line">
           <input type="checkbox" checked={forward} onChange={(e) => setForward(e.target.checked)} />
           Planned amounts I change here also apply to later months
@@ -171,7 +180,7 @@ export function Budget({ month, view, settings }: ScreenProps) {
       )}
 
       {s.groups.map((g) => {
-        const target = person ? settings.targets[person]?.[g.grp] : undefined;
+        const target = person ? settings.targets[person]?.[g.grp] : merged ? settings.targets.hh?.[g.grp] : undefined;
         return (
           <Card
             key={g.grp}

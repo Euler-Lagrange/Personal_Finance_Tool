@@ -36,6 +36,17 @@ export interface BudgetSummary {
   carried: Cents;
 }
 
+/**
+ * With merged finances there is one planned amount per category. It is still stored as two parts,
+ * in the proportion the two people's plans already had, so un-merging later gives each person a
+ * sensible plan back. With nothing planned before, it all goes under A.
+ */
+export function splitHouseholdPlan(total: Cents, a: Cents, b: Cents): { a: Cents; b: Cents } {
+  if (a + b <= 0) return { a: total, b: 0 };
+  const partA = Math.round((total * a) / (a + b));
+  return { a: partA, b: total - partA };
+}
+
 /** What a rollover category carries into a month: everything planned but unspent in the months before, less any overspending. */
 export function carryOver(history: { planned: Cents; actual: Cents }[]): Cents {
   return history.reduce((t, m) => t + m.planned - m.actual, 0);

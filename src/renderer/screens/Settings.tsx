@@ -58,13 +58,9 @@ export function SettingsScreen({ settings, categories, theme, onTheme }: ScreenP
 function PeopleCard({ settings }: { settings: Settings }) {
   const defaultA = settings.defaultSplit.type === "percent" ? settings.defaultSplit.a : 50;
   const opening = settings.openingBalanceCents;
-  const setPreset = (index: number, a: number | undefined) => {
-    if (a === undefined) return;
-    const presets = settings.presets.map((p, i) => (i === index ? { label: p.label, spec: { type: "percent", a } as SplitSpec } : p));
-    void save({ presets });
-  };
+  const merged = settings.mergedFinances;
   return (
-    <Card title="People and split">
+    <Card title={merged ? "People" : "People and split"}>
       <div className="form-grid">
         <label>
           <span>First person</span>
@@ -74,21 +70,47 @@ function PeopleCard({ settings }: { settings: Settings }) {
           <span>Second person</span>
           <TextCell className="boxed" value={settings.people.b} ariaLabel="Second person's name" onCommit={(b) => void save({ people: { ...settings.people, b } })} />
         </label>
-        <label>
-          <span>Default share for {settings.people.a} (%)</span>
-          <PercentInput value={defaultA} ariaLabel="Default share" onCommit={(a) => a !== undefined && void save({ defaultSplit: { type: "percent", a } })} />
-        </label>
-        <label>
-          <span>Balance carried in from before the app</span>
-          <span className="with-icon">
-            <AmountInput className="boxed" cents={Math.abs(opening)} allowZero ariaLabel="Opening balance" onCommit={(c) => void save({ openingBalanceCents: opening < 0 ? -Math.abs(c) : Math.abs(c) })} />
-            <select aria-label="Who owes the opening balance" value={opening < 0 ? "a" : "b"} onChange={(e) => void save({ openingBalanceCents: e.target.value === "a" ? -Math.abs(opening) : Math.abs(opening) })}>
-              <option value="b">owed by {settings.people.b}</option>
-              <option value="a">owed by {settings.people.a}</option>
-            </select>
-          </span>
-        </label>
+        {!merged && (
+          <label>
+            <span>Default share for {settings.people.a} (%)</span>
+            <PercentInput value={defaultA} ariaLabel="Default share" onCommit={(a) => a !== undefined && void save({ defaultSplit: { type: "percent", a } })} />
+          </label>
+        )}
+        {!merged && (
+          <label>
+            <span>Balance carried in from before the app</span>
+            <span className="with-icon">
+              <AmountInput className="boxed" cents={Math.abs(opening)} allowZero ariaLabel="Opening balance" onCommit={(c) => void save({ openingBalanceCents: opening < 0 ? -Math.abs(c) : Math.abs(c) })} />
+              <select aria-label="Who owes the opening balance" value={opening < 0 ? "a" : "b"} onChange={(e) => void save({ openingBalanceCents: e.target.value === "a" ? -Math.abs(opening) : Math.abs(opening) })}>
+                <option value="b">owed by {settings.people.b}</option>
+                <option value="a">owed by {settings.people.a}</option>
+              </select>
+            </span>
+          </label>
+        )}
       </div>
+      <label className="check-line merged-switch">
+        <input type="checkbox" checked={merged} onChange={(e) => void save({ mergedFinances: e.target.checked })} />
+        Our finances are merged
+      </label>
+      <p className="muted">
+        {merged
+          ? "There is one household budget. Splits, each person's own budget and the balance between you are hidden. Nothing was converted: untick this and they come back exactly as they were."
+          : "Tick this if you stop keeping separate budgets. The app then shows one household budget and hides splits and the balance between you. Nothing is converted, so it can be unticked again."}
+      </p>
+      {!merged && <SplitPresets settings={settings} />}
+    </Card>
+  );
+}
+
+function SplitPresets({ settings }: { settings: Settings }) {
+  const setPreset = (index: number, a: number | undefined) => {
+    if (a === undefined) return;
+    const presets = settings.presets.map((p, i) => (i === index ? { label: p.label, spec: { type: "percent", a } as SplitSpec } : p));
+    void save({ presets });
+  };
+  return (
+    <>
       <h3>Split presets</h3>
       <p className="muted">These appear in every split menu. Each is the share {settings.people.a} carries.</p>
       <ul className="chips">
@@ -108,13 +130,14 @@ function PeopleCard({ settings }: { settings: Settings }) {
           </button>
         </li>
       </ul>
-    </Card>
+    </>
   );
 }
 
 function GroupsCard({ settings, categories }: { settings: Settings; categories: Category[] }) {
   const [name, setName] = useState("");
-  const setTarget = (person: Person, grp: string, value: number | undefined) => {
+  const merged = settings.mergedFinances;
+  const setTarget = (person: Person | "hh", grp: string, value: number | undefined) => {
     const mine = { ...settings.targets[person] };
     if (value === undefined) delete mine[grp];
     else mine[grp] = value;
@@ -133,8 +156,14 @@ function GroupsCard({ settings, categories }: { settings: Settings; categories: 
         <thead>
           <tr>
             <th>Group</th>
-            <th className="num">{settings.people.a} target %</th>
-            <th className="num">{settings.people.b} target %</th>
+            {merged ? (
+              <th className="num">Household target %</th>
+            ) : (
+              <>
+                <th className="num">{settings.people.a} target %</th>
+                <th className="num">{settings.people.b} target %</th>
+              </>
+            )}
             <th aria-label="Actions" />
           </tr>
         </thead>
@@ -146,12 +175,20 @@ function GroupsCard({ settings, categories }: { settings: Settings; categories: 
                 <td className="wide">
                   <TextCell value={g} ariaLabel={`Name of group ${g}`} onCommit={(to) => void change("groups.rename", { from: g, to })} />
                 </td>
-                <td className="num">
-                  <PercentInput value={settings.targets.a?.[g]} ariaLabel={`${g} target for ${settings.people.a}`} onCommit={(v) => setTarget("a", g, v)} />
-                </td>
-                <td className="num">
-                  <PercentInput value={settings.targets.b?.[g]} ariaLabel={`${g} target for ${settings.people.b}`} onCommit={(v) => setTarget("b", g, v)} />
-                </td>
+                {merged ? (
+                  <td className="num">
+                    <PercentInput value={settings.targets.hh?.[g]} ariaLabel={`${g} target for the household`} onCommit={(v) => setTarget("hh", g, v)} />
+                  </td>
+                ) : (
+                  <>
+                    <td className="num">
+                      <PercentInput value={settings.targets.a?.[g]} ariaLabel={`${g} target for ${settings.people.a}`} onCommit={(v) => setTarget("a", g, v)} />
+                    </td>
+                    <td className="num">
+                      <PercentInput value={settings.targets.b?.[g]} ariaLabel={`${g} target for ${settings.people.b}`} onCommit={(v) => setTarget("b", g, v)} />
+                    </td>
+                  </>
+                )}
                 <td className="actions">
                   <button type="button" className="icon-btn" aria-label={`Remove group ${g}`} title={used ? "Move its categories to another group first" : "Remove group"} disabled={used || settings.groups.length <= 1} onClick={() => void save({ groups: settings.groups.filter((x) => x !== g) })}>
                     <Trash2 size={14} />

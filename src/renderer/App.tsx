@@ -38,7 +38,7 @@ const readRoute = (): Route => {
 export function App() {
   const [route, setRoute] = useState<Route>(readRoute);
   const [month, setMonth] = useState(() => monthOf(toISO(new Date())));
-  const [view, setView] = useState<View>("a");
+  const [chosenView, setView] = useState<View>("a");
   const settings = useQuery("settings.get");
   const categories = useQuery("categories.list", { includeArchived: true });
   const local = useQuery("local.get");
@@ -93,8 +93,12 @@ export function App() {
 
   if (!settings || !categories) return <div className="loading">Loading…</div>;
 
+  // With merged finances there is one budget: everything shows the household.
+  const merged = settings.mergedFinances;
+  const view: View = merged ? "hh" : chosenView;
   const props: ScreenProps = { month, view, settings, categories };
-  const title = route === "settings" ? "Settings" : NAV.find((n) => n.id === route)!.label;
+  const labelOf = (n: (typeof NAV)[number]) => (n.id === "split" && merged ? "Bills" : n.label);
+  const title = route === "settings" ? "Settings" : labelOf(NAV.find((n) => n.id === route)!);
   const usesMonth = route === "dashboard" || route === "transactions" || route === "budget" || route === "split" || route === "pay" || route === "savings";
   const usesView = route === "dashboard" || route === "transactions" || route === "budget";
 
@@ -108,10 +112,10 @@ export function App() {
           <span>Household Finance</span>
         </div>
         <nav aria-label="Main">
-          {NAV.map(({ id, label, icon: Icon }) => (
-            <a key={id} href={`#/${id}`} className={route === id ? "nav on" : "nav"} aria-current={route === id ? "page" : undefined}>
-              <Icon size={17} aria-hidden="true" />
-              {label}
+          {NAV.map((n) => (
+            <a key={n.id} href={`#/${n.id}`} className={route === n.id ? "nav on" : "nav"} aria-current={route === n.id ? "page" : undefined}>
+              <n.icon size={17} aria-hidden="true" />
+              {labelOf(n)}
             </a>
           ))}
         </nav>
@@ -141,7 +145,7 @@ export function App() {
                 </button>
               </div>
             )}
-            {usesView && (
+            {usesView && !merged && (
               <Segmented
                 ariaLabel="Whose budget"
                 value={view}

@@ -15,10 +15,11 @@ export interface Settings {
   defaultSplit: SplitSpec;
   presets: SplitPreset[];
   groups: string[];
-  /** Target share of planned income per group, in percent, per person. */
-  targets: Record<Person, Record<string, number>>;
+  /** Target share of planned income per group, in percent, per person. `hh` is the household's, used while finances are merged. */
+  targets: Record<Person, Record<string, number>> & { hh?: Record<string, number> };
   /** Balance carried in from before the app. Positive: B owes A. */
   openingBalanceCents: Cents;
+  /** One household budget: splits, each person's own budget and the balance are hidden. Nothing is converted. */
   mergedFinances: boolean;
 }
 

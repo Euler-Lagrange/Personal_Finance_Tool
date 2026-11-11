@@ -44,7 +44,7 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
 
       <Card title="Needs, wants and savings" className="span-2">
         {s.groups.map((g) => {
-          const target = view === "hh" ? undefined : settings.targets[view]?.[g.grp];
+          const target = view === "hh" ? (settings.mergedFinances ? settings.targets.hh?.[g.grp] : undefined) : settings.targets[view]?.[g.grp];
           return (
             <div className="group-line" key={g.grp}>
               <div className="group-line-head">
@@ -63,7 +63,7 @@ export function Dashboard({ month, view, settings }: ScreenProps) {
         })}
       </Card>
 
-      <BalanceCard month={month} settings={settings} />
+      {!settings.mergedFinances && <BalanceCard month={month} settings={settings} />}
 
       <div className="stack">
         <NextPaycheck view={view} settings={settings} />

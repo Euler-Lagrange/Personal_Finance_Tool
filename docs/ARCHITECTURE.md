@@ -25,7 +25,7 @@ Settings sits behind a gear: people, split, groups, categories, pay profile, API
 
 ## Everything is editable
 
-Nothing is fixed in code. Transaction cells edit in place; columns can be shown and hidden. Categories can be added, renamed, reordered, moved between groups, given an icon and archived. Groups can be renamed and added, with a target percentage per person. Planned amounts are per category, per person, per month. Split presets, bill templates, renewals, funds, the account list, merchant memory, pay settings and the tax rates file are all editable. A rename applies to past months; archiving keeps history.
+Nothing is fixed in code. Transaction cells edit in place; columns can be shown, hidden and put in any order, and that choice is kept per PC. Categories can be added, renamed, reordered, moved between groups, given an icon and archived. Groups can be renamed and added, with a target percentage per person. Planned amounts are per category, per person, per month. Split presets, bill templates, renewals, funds, the account list, merchant memory, pay settings and the tax rates file are all editable. A rename applies to past months; archiving keeps history.
 
 ## How one entry works
 
@@ -36,7 +36,7 @@ A purchase is entered once at its full amount. The entry stores the amount, the 
 - **Split:** a percentage for person A (presets plus custom) or a fixed amount. A's share is rounded to the cent, halves away from zero, and B gets the remainder, so shares always add up and a refund mirrors its purchase. Shares are stored, so changing the default later never rewrites history.
 - **Kinds:** expense, income, settlement (money between the two people; moves the balance, touches no budget). A refund is a negative expense in the same category.
 - **Paid from a fund:** lowers that sinking fund and stays out of the month's budget.
-- **Merged finances:** a Settings switch. One Household budget; split controls and balance hidden. Entries keep both shares, so it needs no conversion and can be turned off.
+- **Merged finances:** a Settings switch. One Household budget; the person switch, split controls, the statement and the balance are hidden, and the Bills & Split screen becomes Bills. Entries keep both shares, so it needs no conversion and can be turned off. A planned amount typed for the household is stored as two parts in the proportion the two plans already had; the household has its own group targets.
 
 ## Screenshot import (milestone 3)
 

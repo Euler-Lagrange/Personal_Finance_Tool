@@ -10,8 +10,8 @@ export interface GlanceData {
   month: string;
   names: Record<Person, string>;
   views: { label: string; leftToSpend: Cents; spent: Cents; available: Cents; income: Cents; groups: { grp: string; actual: Cents; planned: Cents }[] }[];
-  /** Positive means B owes A. */
-  balance: Cents;
+  /** Positive means B owes A. Null when finances are merged and there is no balance to keep. */
+  balance: Cents | null;
   billsDue: { name: string; date: string; cents: Cents }[];
   paychecks: { name: string; date: string; cents: Cents | null }[];
   funds: { name: string; cents: Cents; target: Cents | null }[];
@@ -31,7 +31,7 @@ const rows = (items: [string, string][]) => items.map(([label, value]) => `<div 
 
 /** The glance page as one self-contained HTML document, sized to read on a phone without zooming. */
 export function glanceHtml(data: GlanceData): string {
-  const owes = whoOwes(data.balance);
+  const owes = data.balance === null ? null : whoOwes(data.balance);
   const views = data.views
     .map(
       (v) => `<section>
@@ -56,7 +56,7 @@ section { border: 1px solid #d5dbe3; border-radius: 12px; padding: 12px 14px; ma
 <h1>${monthLabel(data.month)}</h1>
 <p class="muted">As of ${esc(data.asOf)}. Read-only: open the app on a PC to change anything.</p>
 ${views}
-<section><h2>Between you</h2><p class="row"><strong>${owes ? `${esc(data.names[owes.from])} owes ${esc(data.names[owes.to])} ${formatMoney(owes.amount)}` : "All square"}</strong></p></section>
+${data.balance === null ? "" : `<section><h2>Between you</h2><p class="row"><strong>${owes ? `${esc(data.names[owes.from])} owes ${esc(data.names[owes.to])} ${formatMoney(owes.amount)}` : "All square"}</strong></p></section>`}
 ${list("Bills due this week", rows(data.billsDue.map((b) => [`${esc(b.name)} <span class="muted">${shortDate(b.date)}</span>`, formatMoney(b.cents)])), "Nothing due in the next seven days.")}
 ${data.paychecks.length > 0 ? list("Next paycheck", rows(data.paychecks.map((p) => [`${esc(p.name)} <span class="muted">${shortDate(p.date)}</span>`, p.cents === null ? "–" : formatMoney(p.cents)])), "") : ""}
 ${data.funds.length > 0 ? list("Funds", data.funds.map((f) => `<div class="row"><span>${esc(f.name)}</span><span class="num">${formatMoney(f.cents)}${f.target !== null ? ` of ${formatMoney(f.target)}` : ""}</span></div>${f.target !== null ? bar(Math.max(0, f.cents), f.target) : ""}`).join("\n"), "") : ""}

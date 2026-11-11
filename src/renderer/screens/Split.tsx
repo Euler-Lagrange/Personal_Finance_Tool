@@ -12,6 +12,8 @@ export function SplitScreen({ month, settings, categories }: ScreenProps) {
   if (!entries) return null;
   const moving = entries.filter((e) => balanceDelta(e) !== 0);
   const { a, b } = settings.people;
+  // Merged finances: nothing is owed between the two people, so only the bills remain.
+  if (settings.mergedFinances) return <Bills month={month} settings={settings} categories={categories} />;
   return (
     <div className="stack">
       <div className="grid stats">

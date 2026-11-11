@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Columns3, Plus, Scissors, Search, Trash2, FileDown } from "lucide-react";
+import { ArrowDown, ArrowUp, Columns3, Plus, Scissors, Search, Trash2, FileDown } from "lucide-react";
 import { change, toast, useQuery } from "../api";
 import type { ScreenProps } from "../App";
 import type { EntryKind } from "../../core/balance";
@@ -8,26 +8,27 @@ import { formatMoney, parseMoney } from "../../core/money";
 import type { Person, SplitSpec } from "../../core/split";
 import type { Category, Entry, EntryPatch, FundRow } from "../../shared/types";
 import { AmountInput, Segmented, SplitSelect, TextCell } from "../components/ui";
+import { TX_COLUMNS, moveColumn, readColumnPrefs, visibleColumns, type ColumnPrefs, type TxColumnId } from "../../shared/columns";
 import { FundSelect } from "./Savings";
 import { saveExport } from "./Year";
 
-const OPTIONAL_COLUMNS = [
-  { id: "paid_by", label: "Paid by" },
-  { id: "split", label: "Split" },
-  { id: "share", label: "Share" },
-  { id: "fund", label: "Paid from" },
-  { id: "account", label: "Account" },
-  { id: "note", label: "Note" },
-] as const;
-type ColumnId = (typeof OPTIONAL_COLUMNS)[number]["id"];
-const DEFAULT_COLUMNS: ColumnId[] = ["paid_by", "split", "share"];
-
-function loadColumns(): ColumnId[] {
+/** Column choices are kept per PC: a wide desktop screen and a laptop want different tables. */
+function loadColumns(): ColumnPrefs {
+  const read = (key: string): unknown => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? "null");
+    } catch {
+      return null;
+    }
+  };
+  return readColumnPrefs(read("tx-column-order"), read("tx-columns"));
+}
+function saveColumns(prefs: ColumnPrefs): void {
   try {
-    const saved = JSON.parse(localStorage.getItem("tx-columns") ?? "null") as ColumnId[] | null;
-    return Array.isArray(saved) ? saved.filter((c) => OPTIONAL_COLUMNS.some((o) => o.id === c)) : DEFAULT_COLUMNS;
+    localStorage.setItem("tx-column-order", JSON.stringify(prefs.order));
+    localStorage.setItem("tx-columns", JSON.stringify(prefs.shown));
   } catch {
-    return DEFAULT_COLUMNS;
+    // The choice still holds until the window closes.
   }
 }
 
@@ -40,7 +41,7 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [splitting, setSplitting] = useState<number | null>(null);
-  const [columns, setColumns] = useState<ColumnId[]>(loadColumns);
+  const [columns, setColumns] = useState<ColumnPrefs>(loadColumns);
   const [showColumns, setShowColumns] = useState(false);
   const [showExport, setShowExport] = useState(false);
 
@@ -51,14 +52,18 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
   }, [entries, search]);
 
   if (!entries) return null;
+  // With merged finances there is nothing to split, so those columns are not on offer.
+  const offered = TX_COLUMNS.map((c) => c.id).filter((id) => !settings.mergedFinances || (id !== "split" && id !== "share"));
   // The Paid from column also appears by itself when a purchase on screen was paid from a fund.
-  const has = (c: ColumnId) => columns.includes(c) || (c === "fund" && entries.some((e) => e.from_fund));
-  const columnCount = 6 + OPTIONAL_COLUMNS.filter((c) => has(c.id)).length;
-  const toggleColumn = (c: ColumnId) => {
-    const next = has(c) ? columns.filter((x) => x !== c) : [...columns, c];
+  const visible = visibleColumns(columns, offered, entries.some((e) => e.from_fund) ? ["fund"] : []);
+  const has = (c: TxColumnId) => visible.includes(c);
+  const columnCount = 2 + visible.length;
+  const changeColumns = (next: ColumnPrefs) => {
     setColumns(next);
-    localStorage.setItem("tx-columns", JSON.stringify(next));
+    saveColumns(next);
   };
+  const toggleColumn = (c: TxColumnId) => changeColumns({ ...columns, shown: has(c) ? columns.shown.filter((x) => x !== c) : [...columns.shown, c] });
+  const menuColumns = columns.order.filter((id) => offered.includes(id)).map((id) => TX_COLUMNS.find((c) => c.id === id)!);
   const picked = shown.filter((e) => selected.has(e.id));
   const allPicked = shown.length > 0 && picked.length === shown.length;
   const shareOf = (e: Entry) => (view === "hh" ? e.amount_cents : view === "a" ? e.a_cents : e.b_cents);
@@ -118,11 +123,32 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
             Columns
           </button>
           {showColumns && (
-            <div className="menu">
-              {OPTIONAL_COLUMNS.map((c) => (
-                <label key={c.id}>
-                  <input type="checkbox" checked={has(c.id)} onChange={() => toggleColumn(c.id)} /> {c.label}
-                </label>
+            <div className="menu columns-menu">
+              {menuColumns.map((c, i) => (
+                <div key={c.id} className="column-line">
+                  {c.required ? (
+                    <span className="always" title="This column is always shown">
+                      {c.label}
+                    </span>
+                  ) : (
+                    <label>
+                      <input type="checkbox" checked={has(c.id)} onChange={() => toggleColumn(c.id)} /> {c.label}
+                    </label>
+                  )}
+                  <button type="button" className="icon-btn" aria-label={`Move ${c.label} earlier`} title="Move earlier" disabled={i === 0} onClick={() => changeColumns({ ...columns, order: moveColumn(columns.order, offered, c.id, -1) })}>
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`Move ${c.label} later`}
+                    title="Move later"
+                    disabled={i === menuColumns.length - 1}
+                    onClick={() => changeColumns({ ...columns, order: moveColumn(columns.order, offered, c.id, 1) })}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -140,10 +166,12 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
               </option>
             ))}
           </select>
-          <label className="with-icon">
-            Set split
-            <SplitSelect value={null} settings={settings} ariaLabel="Set split for selected" onChange={(split) => void bulk({ split })} />
-          </label>
+          {!settings.mergedFinances && (
+            <label className="with-icon">
+              Set split
+              <SplitSelect value={null} settings={settings} ariaLabel="Set split for selected" onChange={(split) => void bulk({ split })} />
+            </label>
+          )}
           <button type="button" className="btn danger" onClick={() => void remove(picked.map((e) => e.id))}>
             <Trash2 size={15} aria-hidden="true" />
             Delete
@@ -161,16 +189,15 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
                 <th className="check">
                   <input type="checkbox" aria-label="Select all" checked={allPicked} onChange={() => setSelected(allPicked ? new Set() : new Set(shown.map((e) => e.id)))} />
                 </th>
-                <th>Date</th>
-                <th>Description</th>
-                <th>Category</th>
-                {has("paid_by") && <th>Paid by</th>}
-                {has("split") && <th>Split</th>}
-                {has("fund") && <th title="A purchase paid from a fund draws the fund down and stays out of the month's budget">Paid from</th>}
-                {has("account") && <th>Account</th>}
-                {has("note") && <th>Note</th>}
-                <th className="num">Amount</th>
-                {has("share") && <th className="num">{shareName}</th>}
+                {visible.map((id) => (
+                  <th
+                    key={id}
+                    className={id === "amount" || id === "share" ? "num" : undefined}
+                    title={id === "fund" ? "A purchase paid from a fund draws the fund down and stays out of the month's budget" : undefined}
+                  >
+                    {id === "share" ? shareName : TX_COLUMNS.find((c) => c.id === id)!.label}
+                  </th>
+                ))}
                 <th aria-label="Actions" />
               </tr>
             </thead>
@@ -179,7 +206,7 @@ export function Transactions({ month, view, settings, categories }: ScreenProps)
                 <Row
                   key={e.id}
                   entry={e}
-                  has={has}
+                  columns={visible}
                   share={shareOf(e)}
                   settings={settings}
                   categories={categories}
@@ -294,7 +321,7 @@ function QuickAdd({ month, settings, categories }: Pick<ScreenProps, "month" | "
             <option value="b">{settings.people.b}</option>
           </select>
         </label>
-        {kind === "expense" && (
+        {kind === "expense" && !settings.mergedFinances && (
           <label>
             <span>Split</span>
             <SplitSelect value={split} onChange={setSplit} settings={settings} ariaLabel="Split" className="boxed" />
@@ -316,7 +343,7 @@ function QuickAdd({ month, settings, categories }: Pick<ScreenProps, "month" | "
 
 function Row(props: {
   entry: Entry;
-  has: (c: ColumnId) => boolean;
+  columns: TxColumnId[];
   share: number;
   settings: ScreenProps["settings"];
   categories: Category[];
@@ -329,63 +356,86 @@ function Row(props: {
   columnCount: number;
   funds: FundRow[];
 }) {
-  const { entry: e, has, settings, onUpdate } = props;
+  const { entry: e, settings, onUpdate } = props;
   const options = e.kind === "settlement" ? [] : categoriesFor(props.categories, e.kind, e.category_id);
+  const cell = (id: TxColumnId) => {
+    switch (id) {
+      case "date":
+        return (
+          <td key={id}>
+            <input className="cell date" type="date" aria-label="Date" value={e.date} onChange={(ev) => ev.target.value && onUpdate({ date: ev.target.value })} />
+          </td>
+        );
+      case "description":
+        return (
+          <td key={id} className="wide">
+            <TextCell value={e.description} ariaLabel="Description" onCommit={(description) => onUpdate({ description })} />
+            {e.split_of !== null && <span className="tag">split</span>}
+          </td>
+        );
+      case "category":
+        return (
+          <td key={id}>
+            {e.kind === "settlement" ? (
+              <span className="tag">Settlement</span>
+            ) : (
+              <select className="cell cat" aria-label="Category" value={e.category_id ?? ""} onChange={(ev) => onUpdate({ category_id: ev.target.value === "" ? null : Number(ev.target.value) })}>
+                <option value="">Uncategorized</option>
+                {options.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </td>
+        );
+      case "paid_by":
+        return (
+          <td key={id}>
+            <select className="cell" aria-label={e.kind === "expense" ? "Paid by" : e.kind === "income" ? "Received by" : "From"} value={e.paid_by} onChange={(ev) => onUpdate({ paid_by: ev.target.value as Person })}>
+              <option value="a">{settings.people.a}</option>
+              <option value="b">{settings.people.b}</option>
+            </select>
+          </td>
+        );
+      case "split":
+        return <td key={id}>{e.kind === "expense" ? <SplitSelect value={e.split} settings={settings} ariaLabel="Split" onChange={(split) => onUpdate({ split })} /> : <span className="muted">{e.kind === "income" ? "Income" : ""}</span>}</td>;
+      case "fund":
+        return <td key={id}>{e.kind === "expense" && <FundSelect className="cell fund" funds={props.funds} value={e.from_fund ? e.fund_id : null} ariaLabel="Paid from" onChange={(paid_from_fund) => onUpdate({ paid_from_fund })} />}</td>;
+      case "account":
+        return (
+          <td key={id}>
+            <TextCell value={e.account ?? ""} ariaLabel="Account" onCommit={(account) => onUpdate({ account })} />
+          </td>
+        );
+      case "note":
+        return (
+          <td key={id}>
+            <TextCell value={e.note ?? ""} ariaLabel="Note" onCommit={(note) => onUpdate({ note })} />
+          </td>
+        );
+      case "amount":
+        return (
+          <td key={id} className="num">
+            <AmountInput cents={e.amount_cents} ariaLabel="Amount" onCommit={(amount_cents) => onUpdate({ amount_cents })} />
+          </td>
+        );
+      case "share":
+        return (
+          <td key={id} className="num muted" title={e.from_fund ? "Paid from a fund, so it is not part of the month's budget" : undefined}>
+            {e.kind === "settlement" ? "" : e.from_fund ? "–" : formatMoney(props.share)}
+          </td>
+        );
+    }
+  };
   return (
     <>
       <tr className={props.checked ? "picked" : ""}>
         <td className="check">
           <input type="checkbox" aria-label={`Select ${e.description}`} checked={props.checked} onChange={props.onCheck} />
         </td>
-        <td>
-          <input className="cell date" type="date" aria-label="Date" value={e.date} onChange={(ev) => ev.target.value && onUpdate({ date: ev.target.value })} />
-        </td>
-        <td className="wide">
-          <TextCell value={e.description} ariaLabel="Description" onCommit={(description) => onUpdate({ description })} />
-          {e.split_of !== null && <span className="tag">split</span>}
-        </td>
-        <td>
-          {e.kind === "settlement" ? (
-            <span className="tag">Settlement</span>
-          ) : (
-            <select className="cell cat" aria-label="Category" value={e.category_id ?? ""} onChange={(ev) => onUpdate({ category_id: ev.target.value === "" ? null : Number(ev.target.value) })}>
-              <option value="">Uncategorized</option>
-              {options.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </td>
-        {has("paid_by") && (
-          <td>
-            <select className="cell" aria-label={e.kind === "expense" ? "Paid by" : e.kind === "income" ? "Received by" : "From"} value={e.paid_by} onChange={(ev) => onUpdate({ paid_by: ev.target.value as Person })}>
-              <option value="a">{settings.people.a}</option>
-              <option value="b">{settings.people.b}</option>
-            </select>
-          </td>
-        )}
-        {has("split") && <td>{e.kind === "expense" ? <SplitSelect value={e.split} settings={settings} ariaLabel="Split" onChange={(split) => onUpdate({ split })} /> : <span className="muted">{e.kind === "income" ? "Income" : ""}</span>}</td>}
-        {has("fund") && <td>{e.kind === "expense" && <FundSelect className="cell fund" funds={props.funds} value={e.from_fund ? e.fund_id : null} ariaLabel="Paid from" onChange={(paid_from_fund) => onUpdate({ paid_from_fund })} />}</td>}
-        {has("account") && (
-          <td>
-            <TextCell value={e.account ?? ""} ariaLabel="Account" onCommit={(account) => onUpdate({ account })} />
-          </td>
-        )}
-        {has("note") && (
-          <td>
-            <TextCell value={e.note ?? ""} ariaLabel="Note" onCommit={(note) => onUpdate({ note })} />
-          </td>
-        )}
-        <td className="num">
-          <AmountInput cents={e.amount_cents} ariaLabel="Amount" onCommit={(amount_cents) => onUpdate({ amount_cents })} />
-        </td>
-        {has("share") && (
-          <td className="num muted" title={e.from_fund ? "Paid from a fund, so it is not part of the month's budget" : undefined}>
-            {e.kind === "settlement" ? "" : e.from_fund ? "–" : formatMoney(props.share)}
-          </td>
-        )}
+        {props.columns.map(cell)}
         <td className="actions">
           {e.kind === "expense" && (
             <button type="button" className="icon-btn" aria-label="Split across categories" title="Split across categories" aria-expanded={props.splitting} onClick={props.onSplitToggle}>

@@ -9,6 +9,9 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Pictures of a screen in a second state: the screen's route, a dash, then a name. */
 const VARIANTS: Record<string, string> = {
+  "transactions-columns": `[...document.querySelectorAll(".toolbar button")].find((b) => b.textContent.trim() === "Columns").click()`,
+  // Every picture after this one is taken with finances merged, so the merged ones come last.
+  "dashboard-merged": `window.finance.rpc("settings.update", { mergedFinances: true }).then(() => location.reload())`,
   "budget-year": `[...document.querySelectorAll(".toolbar .segmented button")].find((b) => b.textContent.trim().startsWith("All of")).click()`,
   "pay-settings": `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Pay settings").click()`,
   "pay-fixed": `[...document.querySelectorAll(".toolbar .segmented button")][1].click()`,
@@ -17,14 +20,14 @@ const VARIANTS: Record<string, string> = {
 /** Dev helper: visit each screen, save a picture of it, then quit. */
 export async function takeShots(win: BrowserWindow, dir: string): Promise<void> {
   fs.mkdirSync(dir, { recursive: true });
-  const routes = (process.env.FINANCE_SHOT_ROUTES ?? "dashboard,transactions,budget,budget-year,split,pay,pay-settings,pay-fixed,savings,settings").split(",");
+  const routes = (process.env.FINANCE_SHOT_ROUTES ?? "dashboard,transactions,transactions-columns,budget,budget-year,split,pay,pay-settings,pay-fixed,savings,settings,dashboard-merged,budget-merged,split-merged,transactions-merged,settings-merged").split(",");
   await wait(1200);
   for (const route of routes) {
     await win.webContents.executeJavaScript(`location.hash = "#/${route.split("-")[0]}"`);
     await wait(500);
     if (VARIANTS[route]) {
       await win.webContents.executeJavaScript(VARIANTS[route]);
-      await wait(600);
+      await wait(1200);
     }
     const height = (await win.webContents.executeJavaScript("Math.max(document.querySelector('.content')?.scrollHeight ?? 0, 0) + 90")) as number;
     win.setContentSize(1320, Math.min(Math.max(height, 880), 2400));
@@ -53,9 +56,9 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
   };
   // A stuck step must fail the run, not hang it.
   const watchdog = setTimeout(() => {
-    check("smoke run finished in time", false, "timed out after 180 seconds");
+    check("smoke run finished in time", false, "timed out after 210 seconds");
     finish();
-  }, 180_000);
+  }, 210_000);
   const month = new Date().toISOString().slice(0, 7);
   const find = `(await rpc("entries.list", { month: "${month}" })).find((e) => e.description === "Smoke test market")`;
   try {
@@ -206,6 +209,44 @@ export async function runSmoke(win: BrowserWindow, reportFile: string): Promise<
       [xlsxBytes.length, csvText.slice(0, 60)],
     );
     if (process.env.FINANCE_SMOKE_KEEP_XLSX) fs.copyFileSync(workbook, process.env.FINANCE_SMOKE_KEEP_XLSX);
+
+    // ---- column order on Transactions ----
+    const heads = `[...document.querySelectorAll(".table-wrap table.edit thead th")].map((th) => th.textContent.trim()).filter(Boolean)`;
+    const columnsButton = `[...document.querySelectorAll(".toolbar button")].find((b) => b.textContent.trim() === "Columns")`;
+    await page(`location.hash = "#/transactions"; await sleep(800); ${columnsButton}.click(); await sleep(300);
+      document.querySelector('button[aria-label="Move Date later"]').click(); await sleep(400);`);
+    const movedHeads = await page<string[]>(`return ${heads};`);
+    // Leave the screen and come back: the order is remembered on this PC.
+    await page(`location.hash = "#/dashboard"; await sleep(300); location.hash = "#/transactions"; await sleep(800);`);
+    const keptHeads = await page<string[]>(`return ${heads};`);
+    const firstCell = await page<string>(`return rowOf("Smoke test market").children[1].querySelector("input").getAttribute("aria-label");`);
+    check(
+      "a column moved in the Columns menu changes the table and is remembered",
+      movedHeads[0] === "Description" && movedHeads[1] === "Date" && keptHeads.join() === movedHeads.join() && firstCell === "Description",
+      [movedHeads, keptHeads, firstCell],
+    );
+    await page(`${columnsButton}.click(); await sleep(300); document.querySelector('button[aria-label="Move Date earlier"]').click(); await sleep(300);`);
+    const restoredHeads = await page<string[]>(`return ${heads};`);
+    check("moving it back restores the usual order", restoredHeads[0] === "Date" && restoredHeads[1] === "Description", restoredHeads);
+
+    // ---- merged finances: one household budget, and back again ----
+    const mergedBox = `[...document.querySelectorAll("label.merged-switch input")][0]`;
+    const shell = `({ nav: [...document.querySelectorAll("nav a")].map((a) => a.textContent.trim()), whose: !!document.querySelector('[aria-label="Whose budget"]'), settle: [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Settle up") })`;
+    await page(`location.hash = "#/settings"; await sleep(700); ${mergedBox}.click(); await sleep(600); location.hash = "#/dashboard"; await sleep(800);`);
+    const mergedShell = await page<{ nav: string[]; whose: boolean; settle: boolean }>(`return ${shell};`);
+    const mergedOn = await page<boolean>(`return (await rpc("settings.get")).mergedFinances;`);
+    check("merging finances leaves one household view with no balance to settle", mergedOn && mergedShell.nav.includes("Bills") && !mergedShell.nav.includes("Bills & Split") && !mergedShell.whose && !mergedShell.settle, mergedShell);
+    await page(`location.hash = "#/budget"; await sleep(800); commit(document.querySelector('input[aria-label="Planned for Groceries"]'), "700.00"); await sleep(600);`);
+    const plans = await page<number[]>(
+      `const planned = async (view) => (await rpc("budget.get", { month: "${todayISO.slice(0, 7)}", view })).rows.find((r) => r.name === "Groceries").planned; return [await planned("hh"), await planned("a"), await planned("b")];`,
+    );
+    check("the household's planned amount can be typed while merged, and both people keep a part of it", plans[0] === 70000 && plans[1] + plans[2] === 70000 && plans[1] > 0 && plans[2] > 0, plans);
+    await page(`location.hash = "#/transactions"; await sleep(800);`);
+    const mergedTable = await page<{ heads: string[]; split: boolean }>(`return { heads: ${heads}, split: !!document.querySelector('form.quickadd [aria-label="Split"]') };`);
+    check("splits are not offered while merged", !mergedTable.heads.includes("Split") && !mergedTable.split && mergedTable.heads.includes("Amount"), mergedTable);
+    await page(`location.hash = "#/settings"; await sleep(700); ${mergedBox}.click(); await sleep(600); location.hash = "#/dashboard"; await sleep(800);`);
+    const apartShell = await page<{ nav: string[]; whose: boolean; settle: boolean }>(`return ${shell};`);
+    check("un-merging brings back each person's view, splits and the balance", apartShell.nav.includes("Bills & Split") && apartShell.whose && apartShell.settle, apartShell);
 
     // ---- rollover and the phone glance page ----
     const rollButton = `document.querySelector('button[aria-label="Roll Dining out over to the next month"]')`;

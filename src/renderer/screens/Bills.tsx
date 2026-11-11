@@ -33,6 +33,7 @@ export function Bills({ month, settings, categories }: Props) {
   const totalA = withEntry.reduce((t, r) => t + r.entry!.a_cents, 0);
   const totalB = withEntry.reduce((t, r) => t + r.entry!.b_cents, 0);
   const expenseCategories = categories.filter((c) => c.kind === "expense" && !c.archived);
+  const merged = settings.mergedFinances;
   const update = (r: BillRow, patch: Partial<BillInput> & { active?: boolean }) => void change("bills.update", { id: r.id, patch, month });
   const remove = async (r: BillRow) => {
     await change("bills.remove", { id: r.id });
@@ -72,11 +73,11 @@ export function Bills({ month, settings, categories }: Props) {
                 <th>Due day</th>
                 <th>Category</th>
                 <th>Paid by</th>
-                <th>Split</th>
+                {!merged && <th>Split</th>}
                 <th className="num">Usual</th>
                 <th className="num">This month</th>
-                <th className="num">{settings.people.a}</th>
-                <th className="num">{settings.people.b}</th>
+                {!merged && <th className="num">{settings.people.a}</th>}
+                {!merged && <th className="num">{settings.people.b}</th>}
                 <th aria-label="Actions" />
               </tr>
             </thead>
@@ -124,9 +125,11 @@ export function Bills({ month, settings, categories }: Props) {
                         <option value="b">{settings.people.b}</option>
                       </select>
                     </td>
-                    <td>
-                      <BillSplit value={r.split} settings={settings} onChange={(split) => update(r, { split })} />
-                    </td>
+                    {!merged && (
+                      <td>
+                        <BillSplit value={r.split} settings={settings} onChange={(split) => update(r, { split })} />
+                      </td>
+                    )}
                     <td className="num">
                       <AmountInput cents={r.expected_cents} allowZero ariaLabel={`Usual amount for ${r.name}`} onCommit={(amount_cents) => update(r, { amount_cents })} />
                     </td>
@@ -146,8 +149,8 @@ export function Bills({ month, settings, categories }: Props) {
                         />
                       </span>
                     </td>
-                    <td className="num muted">{r.entry ? formatMoney(r.entry.a_cents) : ""}</td>
-                    <td className="num muted">{r.entry ? formatMoney(r.entry.b_cents) : ""}</td>
+                    {!merged && <td className="num muted">{r.entry ? formatMoney(r.entry.a_cents) : ""}</td>}
+                    {!merged && <td className="num muted">{r.entry ? formatMoney(r.entry.b_cents) : ""}</td>}
                     <td className="actions">
                       <button type="button" className="icon-btn" aria-label={`Switch off ${r.name}`} title="Switch off: keeps the bill but stops creating it" onClick={() => update(r, { active: false })}>
                         <Power size={14} />
@@ -162,10 +165,10 @@ export function Bills({ month, settings, categories }: Props) {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={7}>Total</td>
+                <td colSpan={merged ? 6 : 7}>Total</td>
                 <td className="num">{formatMoney(total)}</td>
-                <td className="num">{formatMoney(totalA)}</td>
-                <td className="num">{formatMoney(totalB)}</td>
+                {!merged && <td className="num">{formatMoney(totalA)}</td>}
+                {!merged && <td className="num">{formatMoney(totalB)}</td>}
                 <td />
               </tr>
             </tfoot>
@@ -248,10 +251,12 @@ function AddBill({ month, settings, categories }: Props) {
             <option value="b">{settings.people.b}</option>
           </select>
         </label>
-        <label>
-          <span>Split</span>
-          <BillSplit value={split} onChange={setSplit} settings={settings} />
-        </label>
+        {!settings.mergedFinances && (
+          <label>
+            <span>Split</span>
+            <BillSplit value={split} onChange={setSplit} settings={settings} />
+          </label>
+        )}
         <button type="submit" className="btn primary">
           <Plus size={15} aria-hidden="true" />
           Add bill
